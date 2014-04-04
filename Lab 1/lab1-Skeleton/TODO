@@ -1,0 +1,21 @@
+TODO
+
+1. What if, for the implementation of command_stream_t, we have an additional
+	line struct that looks something like (where, in this case, we write our own
+	arbitrary stack classes):
+
+		struct line {
+			stack* operands;
+			stack* operators;
+		};
+
+    Then make it so that the actual command_stream_t will be an array of lines?
+
+		struct command_stream {
+			line* lines;
+		} stream;
+
+	This way, we can simply use the infix algorithm to push/pop the relevant
+	operands. We'll be able to check for syntax correctness when we're
+	populating the two stacks, then pop them with the right indentation to
+	finish off the project.
