@@ -1,7 +1,7 @@
 # CS 111 Lab 1 Makefile
 
 CC = gcc
-CFLAGS = -g -Wall -Wextra
+CFLAGS = -g
 LAB = 1
 DISTDIR = lab1-$(USER)
 CHECK_DIST = ./check-dist
