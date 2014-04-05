@@ -7,6 +7,7 @@
 // #include <error.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 /* FIXME: You may need to add #include directives, macro definitions,
    static function definitions, etc.  */
@@ -20,16 +21,47 @@ struct command_stream {
 
 typedef enum {
     SIMPLE_STATE, AND_STATE, OR_STATE,
-        NEWLINE_STATE, NULL_STATE
+        INPUT_STATE, OUTPUT_STATE, OPEN_SUBSHELL_STATE,
+        CLOSE_SUBSHELL_STATE, SEQUENCE_STATE, NEWLINE_STATE, 
+        COMMENT_STATE, NULL_STATE
 } state;
 
 static
 bool needs_splitting(state* s, char c)
 {
-    if(c == ' ' || c == '<' || c == '>' || c == '(' ||
-            c == ')' || c == ';')
+    if(c == ' ')
     {
         *s = NULL_STATE;
+        return true;
+    }
+    else if (c == '<')
+    {
+        *s = INPUT_STATE;
+        return true;
+    }
+    else if (c == '>')
+    {
+        *s = OUTPUT_STATE;
+        return true;
+    }    
+    else if (c == '(')
+    {
+        *s = OPEN_SUBSHELL_STATE;
+        return true;
+    }
+    else if (c == ')')
+    {
+        *s = CLOSE_SUBSHELL_STATE;
+        return true;
+    }
+    else if (c == ';')
+    {
+        *s = SEQUENCE_STATE;
+        return true;
+    }
+    else if (c == '#')
+    {
+        *s = COMMENT_STATE;
         return true;
     }
     else if((isalnum(c) || c == '!' || c == '%' || c == '+' ||
@@ -61,8 +93,41 @@ bool needs_splitting(state* s, char c)
 
 
 static
+int validate_token(char *token)
+{
+    state s;
+    char c0 = token[0];
+    needs_splitting(&s, c0);
+
+    if(s == AND_STATE || s == OR_STATE)
+    {
+        long int k;
+        for(k = 0; token[k] != '\0'; k++)
+        {
+            if(k == 2)
+            {
+                fprintf(stderr, "Syntax error: {|...|, &...&}\n");
+                exit(1);
+            }
+        }
+
+        if(s == AND_STATE)
+        {
+            if(k != 2)
+            {
+                fprintf(stderr, "Syntax error: {&}\n");
+                exit(1);
+            }
+        }
+
+        return k;
+    }
+}
+
+
+static
 char **get_tokens(int (*get_next_byte) (void *), 
-                    void *get_next_byte_argument)
+                    void *get_next_byte_argument, long int *ntokens)
 {
     char c;
     long int tokens_position = 0;
@@ -97,6 +162,8 @@ char **get_tokens(int (*get_next_byte) (void *),
                     tmp[i] = buf[i];
                 tmp[i] = '\0';
 
+                validate_token(tmp);
+
                 if(tokens_position == tokens_size)
                 {
                     tokens_size *= 2;
@@ -118,14 +185,10 @@ char **get_tokens(int (*get_next_byte) (void *),
         }
     }
 
-    long int j;
-    for(j = 0; j < tokens_position; j++)
-    {
-        printf("%lu: %s\n", j, tokens[j]);
-    }
-
+    *ntokens = tokens_position;
     return tokens;
 }
+
 
 command_stream_t
 make_command_stream (int (*get_next_byte) (void *),
@@ -135,8 +198,16 @@ make_command_stream (int (*get_next_byte) (void *),
      add auxiliary functions and otherwise modify the source code.
      You can also use external functions defined in the GNU C Library.  */
   // error (1, 0, "command reading not yet implemented");
+    long int ntokens;
+    char **tokens = get_tokens(get_next_byte,
+        get_next_byte_argument, &ntokens);
 
-    get_tokens(get_next_byte, get_next_byte_argument);
+
+    long int j;
+    for(j = 0; j < ntokens; j++)
+    {
+        printf("%lu: %s\n", j, tokens[j]);
+    }
 
   return 0;
 }
