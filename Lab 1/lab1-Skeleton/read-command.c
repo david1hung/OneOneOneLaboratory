@@ -27,6 +27,7 @@ struct command_stream {
 
 struct node {
     command_t command;
+    char **payload;
     struct node *next;
 };
 
@@ -254,6 +255,35 @@ char **get_tokens(int (*get_next_byte) (void *),
         }
     }
 
+    if(buf_position > 0)
+    {
+        char *tmp = (char *)malloc(sizeof(char)*buf_position);
+        long int i;
+        for(i = 0; i < buf_position; i++)
+            tmp[i] = buf[i];
+        tmp[i] = '\0';
+
+        validate_token(tmp);
+
+        if(tokens_position == tokens_size)
+        {
+            tokens_size *= 2;
+            tokens = (char **)realloc((void *)tokens,
+                sizeof(char *)*tokens_size);
+        }
+
+        tokens[tokens_position] = tmp;
+        tokens_position++;
+    }
+
+    buf_position = 0;
+
+    if(c != ' ')
+    {
+        buf[buf_position] = c;
+        buf_position++;
+    }
+
     *ntokens = tokens_position;
     return tokens;
 }
@@ -272,6 +302,12 @@ static
 void populate_stacks(char **tokens, long int ntokens,
     struct stack *op, struct stack *cmd)
 {
+    /* ... */
+}
+
+static
+command_t *split_line(char **line, long int ntokens)
+{
     state s = NULL_STATE;
     command_t c = malloc(sizeof(struct command));
 
@@ -279,19 +315,22 @@ void populate_stacks(char **tokens, long int ntokens,
     for(i = 0; i < ntokens; i++)
     {
         state old_s = s;
-        int delta = get_state(&s, tokens[i][0]);
+        int delta = get_state(&s, line[i][0]);
         
         if(delta == 0)
         {
-            
+            // i++;
+            // check whether i is still within the bounds
+            // take the token
+
+            // if we *just* enter a simple state, we need to note
+            // that we are in the simple state for the next iteration
+            // NEED: SIMPLE_COMMAND COUNTER THAT RESETS UPON COMPLETION
+
         }
 
-
-
-        
-
-
     }
+    return NULL;
 }
 
 
@@ -313,6 +352,7 @@ make_command_stream (int (*get_next_byte) (void *),
     struct stack cmd;
     init_stack(&cmd);
 
+    /*
     populate_stacks(tokens, ntokens, &op, &cmd);
     
     char hello[] = "helloes\n";
@@ -322,14 +362,15 @@ make_command_stream (int (*get_next_byte) (void *),
     push(&op, c);
     command_t d = pop(&op);
     printf("%s", d->input);
+    */
 
-    /*
+    
     long int j;
     for(j = 0; j < ntokens; j++)
     {
         printf("%lu: %s\n", j, tokens[j]);
     }
-    */
+    
 
   return 0;
 }

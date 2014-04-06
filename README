@@ -1,0 +1,5 @@
+Roadmap: what we need to do!
+
+1. 	Split into series of commands (\n\n considerations)
+2. 	Break into struct command
+3. 	Stack everything! Should be relatively straight forward.
