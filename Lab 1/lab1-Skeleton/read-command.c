@@ -298,15 +298,113 @@ char **get_tokens(int (*get_next_byte) (void *),
     OPEN_SUBSHELL_STATE, CLOSE_SUBSHELL_STATE, SEQUENCE_STATE,
     NEWLINE_STATE, COMMENT_STATE, NULL_STATE */
 
+
 static
-void populate_stacks(char **tokens, long int ntokens,
-    struct stack *op, struct stack *cmd)
+char ***split_command_lines(char **tokens, long int ntokens, long int *nlines)
 {
-    /* ... */
+    long int lines_position = 0;
+    long int lines_size = 64;
+    char ***lines = (char ***)malloc(sizeof(char **)*lines_size);
+
+    long int buf_position = 0;
+    long int buf_size = 128;
+    char **buf = (char **)malloc(sizeof(char *)*buf_size);
+
+    state s = NULL_STATE;
+    long int l;
+
+    long int i;
+    for(i = 0; i < ntokens; i++)
+    {
+        get_state(&s, tokens[i][0]);
+        l = get_token_length(tokens[i]);
+        if(s == NEWLINE_STATE && l > 1 && i > 0)
+        {
+            state s_prev;
+            get_state(&s_prev, tokens[i-1][0]);
+
+            if(s_prev/3 > 0)
+            {
+                buf[buf_position] = tokens[i];
+                buf_position++;
+                continue;
+            }
+            else
+            {
+                buf[buf_position] = (char *)malloc(sizeof(char));
+                buf[buf_position][0] = '\0';
+                buf_position++;
+            }
+
+            char **tmp = (char **)malloc(sizeof(char *)*buf_position);
+            long int j;
+            for(j = 0; j < buf_position; j++)
+                tmp[j] = buf[j];
+            tmp[j] = tokens[i];
+
+            if(lines_position == lines_size)
+            {
+                lines_size *= 2;
+                lines = (char ***)realloc((void *)lines,
+                    sizeof(char **)*lines_size);
+            }
+
+            lines[lines_position] = tmp;
+            lines_position++;
+
+            buf_position = 0;
+        }
+        else
+        {
+            if(buf_position == buf_size)
+            {
+                buf_size *= 2;
+                buf = (char **)realloc((void *)buf,
+                    sizeof(char *)*buf_size);
+            }
+
+            buf[buf_position] = tokens[i];
+            buf_position++;
+        }
+    }
+
+
+    if(buf_position > 0)
+    {
+
+        if(s > 0)
+        {
+            fprintf(stderr, "Syntax error!");
+            exit(1);
+        }
+
+        buf_position++;
+
+        char **tmp = (char **)malloc(sizeof(char *)*buf_position);
+        long int j;
+        for(j = 0; j < buf_position-1; j++)
+            tmp[j] = buf[j];
+        tmp[j] = malloc(sizeof(char));
+
+        tmp[j][0] = '\0';
+
+        if(lines_position == lines_size)
+        {
+            lines_size *= 2;
+            lines = (char ***)realloc((void *)lines,
+                sizeof(char **)*lines_size);
+        }
+
+        lines[lines_position] = tmp;
+        lines_position++;
+    }
+
+    *nlines = lines_position;
+    return lines;
 }
 
 static
-command_t *split_line(char **line, long int ntokens)
+command_t *generate_commands(char **line, long int ntokens)
 {
     state s = NULL_STATE;
     command_t c = malloc(sizeof(struct command));
@@ -333,6 +431,13 @@ command_t *split_line(char **line, long int ntokens)
     return NULL;
 }
 
+static
+void populate_stacks(char **tokens, long int ntokens,
+    struct stack *op, struct stack *cmd)
+{
+    /* ... */
+}
+
 
 command_stream_t
 make_command_stream (int (*get_next_byte) (void *),
@@ -352,6 +457,10 @@ make_command_stream (int (*get_next_byte) (void *),
     struct stack cmd;
     init_stack(&cmd);
 
+    long int nlines;
+    char ***lines = split_command_lines(tokens, ntokens, &nlines);
+    free(tokens);
+
     /*
     populate_stacks(tokens, ntokens, &op, &cmd);
     
@@ -366,11 +475,26 @@ make_command_stream (int (*get_next_byte) (void *),
 
     
     long int j;
+    
+    /*
+    // get_tokens debug
     for(j = 0; j < ntokens; j++)
     {
         printf("%lu: %s\n", j, tokens[j]);
     }
-    
+    */
+
+    // split_command_lines debug
+    for(j = 0; j < nlines; j++)
+    {
+        long int k;
+        state s;
+        for(k = 0; lines[j][k][0] != '\0'; k++)
+        {
+            printf("(%lu, %lu): %s\n", j, k, lines[j][k]);
+        }
+    }
+   
 
   return 0;
 }
