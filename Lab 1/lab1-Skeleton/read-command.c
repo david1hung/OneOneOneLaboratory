@@ -16,9 +16,9 @@
    complete the incomplete type declaration in command.h.  */
 
 typedef enum {
-    SIMPLE_STATE, INPUT_STATE, OUTPUT_STATE, AND_STATE, OR_STATE,
-        OPEN_SUBSHELL_STATE, CLOSE_SUBSHELL_STATE, SEQUENCE_STATE,
-        NEWLINE_STATE, COMMENT_STATE, NULL_STATE
+    SIMPLE_STATE, INPUT_STATE, OUTPUT_STATE, NEWLINE_STATE, SEQUENCE_STATE,
+        AND_STATE, OR_STATE, OPEN_SUBSHELL_STATE, CLOSE_SUBSHELL_STATE,
+        COMMENT_STATE, NULL_STATE
 } state;
 
 struct command_stream {
@@ -43,14 +43,13 @@ void init_stack(struct stack *s)
 static
 void push(struct stack *s, command_t c)
 {
+    if(s == NULL)
+        return;
+
     struct node *n = (struct node *)malloc(sizeof(struct node));
     n->command = c;
     n->next = s->head;
-
-    if(s->head == NULL)
-        s->head = n;
-    else
-        s->head = n;
+    s->head = n;
 }
 
 
@@ -69,6 +68,15 @@ command_t pop(struct stack *s)
 }
 
 static
+command_t top(struct stack *s)
+{
+    if(s->head == NULL)
+        return NULL;
+
+    return s->head->command;
+}
+
+static
 void parse_stack(struct stack *s)
 {
     if(s->head == NULL)
@@ -83,7 +91,7 @@ void parse_stack(struct stack *s)
     while(n != NULL)
     {
         printf("Node %lu\n",count);
-        if(n->command->type = SIMPLE_COMMAND)
+        if(n->command->type == SIMPLE_COMMAND)
         {
             if(n->command->input != NULL)
                 printf("    Input: %s\n",n->command->input);
@@ -96,6 +104,10 @@ void parse_stack(struct stack *s)
             for(i = 0; n->command->u.word[i][0] != '\0'; i++)
                 printf("        %s\n",n->command->u.word[i]);
             
+        }
+        else
+        {
+            printf("    Hello! I am COMMAND of type %u.\n",n->command->type);
         }
         count++;
         n = n->next;
@@ -497,19 +509,21 @@ void populate_stacks(char **line, long int *line_number, struct stack *op,
                 if(!processing_simple_command)
                 {
                     c = (command_t)malloc(sizeof(struct command));
+                    c->input = NULL;
+                    c->output = NULL;
                     c->type = SIMPLE_COMMAND;
                     c->u.word = (char **)malloc(sizeof(char *)*word_size);
                     
                     c->u.word[word_position] = line[i];
                     word_position++;
 
-                    push(op, c);
+                    push(cmd, c);
                     processing_simple_command = true;
 
                 }
                 else
                 {
-                    c = pop(op);
+                    c = pop(cmd);
 
                     if(word_size == word_position)
                     {
@@ -519,12 +533,11 @@ void populate_stacks(char **line, long int *line_number, struct stack *op,
                     }
 
                     c->u.word[word_position] = line[i];
-                    push(op, c);
+                    push(cmd, c);
 
                     word_position++;
                 }
-                break;
-            }
+            } break;
             case INPUT_STATE:
             {
                 if(!processing_simple_command)
@@ -545,9 +558,9 @@ void populate_stacks(char **line, long int *line_number, struct stack *op,
                         get_state(&s, line[i][0]);
                         if(s == SIMPLE_STATE)
                         {
-                            c = pop(op);
+                            c = pop(cmd);
                             c->input = line[i];
-                            push(op, c);
+                            push(cmd, c);
                         }
                         else
                         {
@@ -561,8 +574,7 @@ void populate_stacks(char **line, long int *line_number, struct stack *op,
                         exit(1);
                     }
                 }
-                break;
-            }
+            } break;
             case OUTPUT_STATE:
             {
                 if(!processing_simple_command)
@@ -584,9 +596,9 @@ void populate_stacks(char **line, long int *line_number, struct stack *op,
 
                         if(s == SIMPLE_STATE)
                         {
-                            c = pop(op);
+                            c = pop(cmd);
                             c->output = line[i];
-                            push(op, c);
+                            push(cmd, c);
                         }
                         else
                         {
@@ -600,8 +612,48 @@ void populate_stacks(char **line, long int *line_number, struct stack *op,
                         exit(1);
                     }
                 }
-                break;
-            }
+            } break;
+            case NEWLINE_STATE:
+            case SEQUENCE_STATE:
+            {
+                len = get_token_length(line[i]);
+                if(len == 1)
+                {
+                    if(!processing_simple_command)
+                    {
+                        fprintf(stderr, "7. Syntax error.\n");
+                        exit(1);
+                    }
+                    
+                    processing_simple_command = false;
+
+                    if(word_size == word_position)
+                    {
+                        word_size *= 2;
+                        c->u.word = (char **)realloc((void *)c->u.word,
+                            sizeof(char *)*word_size);
+                    }
+
+                    c->u.word[word_position] = (char *)malloc(sizeof(char));
+                    c->u.word[word_position][0] = '\0';
+                    word_position = 0;
+
+
+                    c = (command_t)malloc(sizeof(struct command));
+                    c->type = SEQUENCE_COMMAND;
+                    c->input = NULL;
+                    c->output = NULL;
+
+                    free(line[i]);
+                    push(op, c);
+                }
+                else if(len > 1)
+                {
+                    free(line[i]);
+                    continue;
+                }
+            } break;
+
         }
     }
 
@@ -654,6 +706,7 @@ make_command_stream (int (*get_next_byte) (void *),
         printf("Command line %lu\n", j);
     }
 
+    parse_stack(&cmd);
     parse_stack(&op);
 
     return 0;

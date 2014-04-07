@@ -1,1 +1,1 @@
-echo sort > a < b failed!
+echo ; sort > a < b failed!
