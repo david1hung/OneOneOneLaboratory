@@ -72,6 +72,9 @@ command_t pop(struct stack *s)
 static
 bool needs_splitting(state *s, char c)
 {
+    if(s == NULL)
+        return false;
+
     if(c == ' ')
     {
         *s = NULL_STATE;
@@ -109,7 +112,7 @@ bool needs_splitting(state *s, char c)
     }
     else if((isalnum(c) || c == '!' || c == '%' || c == '+' ||
                 c == ',' || c == '-' || c == '.' || c == '/' ||
-                c == ':' || c == '@' || c == '^' || c == '_') && 
+                c == ':' || c == '@' || c == '^' || c == '_') &&
                 *s != SIMPLE_STATE)
     {
         *s = SIMPLE_STATE;
@@ -134,23 +137,14 @@ bool needs_splitting(state *s, char c)
         return false;
 }
 
-/* Returns 0 if cmd->cmd, 1 if cmd->op, -1 if op->cmd */
-
 static
-int get_state(state *s, char c)
+void get_state(state *s, char c)
 {
+    if(s == NULL)
+        printf("Yep.\n");
+
     state s_old = *s;
     needs_splitting(s, c);
-
-    int a = s_old/3;
-    int b = (*s)/3;
-
-    if(a == b)
-        return 0;
-    else if(a < b)
-        return 1;
-    else
-        return -1;
 }
 
 static
@@ -165,7 +159,7 @@ long int get_token_length(char *t)
 static
 long int validate_token(char *token)
 {
-    state s;
+    state s = NULL_STATE;
     char c0 = token[0];
     needs_splitting(&s, c0);
 
@@ -226,9 +220,10 @@ char **get_tokens(int (*get_next_byte) (void *),
         {
             if(buf_position > 0)
             {
+                buf_position++;
                 char *tmp = (char *)malloc(sizeof(char)*buf_position);
                 long int i;
-                for(i = 0; i < buf_position; i++)
+                for(i = 0; i < buf_position-1; i++)
                     tmp[i] = buf[i];
                 tmp[i] = '\0';
 
@@ -257,9 +252,10 @@ char **get_tokens(int (*get_next_byte) (void *),
 
     if(buf_position > 0)
     {
+        buf_position++;
         char *tmp = (char *)malloc(sizeof(char)*buf_position);
         long int i;
-        for(i = 0; i < buf_position; i++)
+        for(i = 0; i < buf_position-1; i++)
             tmp[i] = buf[i];
         tmp[i] = '\0';
 
@@ -276,29 +272,13 @@ char **get_tokens(int (*get_next_byte) (void *),
         tokens_position++;
     }
 
-    buf_position = 0;
-
-    if(c != ' ')
-    {
-        buf[buf_position] = c;
-        buf_position++;
-    }
-
+    free(buf);
     *ntokens = tokens_position;
     return tokens;
 }
 
 
-/* We're going to skimp out on having two separate stack classes here:
-    a command with command_type SUBSHELL_COMMAND can fall under two categories.
-        1. status = 0 -> '('
-        2. status = 1 -> ')' */
-
-/*  SIMPLE_STATE, INPUT_STATE, OUTPUT_STATE, AND_STATE, OR_STATE,
-    OPEN_SUBSHELL_STATE, CLOSE_SUBSHELL_STATE, SEQUENCE_STATE,
-    NEWLINE_STATE, COMMENT_STATE, NULL_STATE */
-
-
+/* NOTE: each line ends with an '\0' rather than '\n\n\0' */
 static
 char ***split_command_lines(char **tokens, long int ntokens, long int *nlines)
 {
@@ -316,11 +296,18 @@ char ***split_command_lines(char **tokens, long int ntokens, long int *nlines)
     long int i;
     for(i = 0; i < ntokens; i++)
     {
+        if(buf_position == buf_size)
+        {
+            buf_size *= 2;
+            buf = (char **)realloc((void *)buf,
+                sizeof(char *)*buf_size);
+        }
+      
         get_state(&s, tokens[i][0]);
         l = get_token_length(tokens[i]);
         if(s == NEWLINE_STATE && l > 1 && i > 0)
         {
-            state s_prev;
+            state s_prev = NULL_STATE;
             get_state(&s_prev, tokens[i-1][0]);
 
             if(s_prev/3 > 0)
@@ -329,18 +316,16 @@ char ***split_command_lines(char **tokens, long int ntokens, long int *nlines)
                 buf_position++;
                 continue;
             }
-            else
-            {
-                buf[buf_position] = (char *)malloc(sizeof(char));
-                buf[buf_position][0] = '\0';
-                buf_position++;
-            }
+
+            free(tokens[i]);
+            buf[buf_position] = (char *)malloc(sizeof(char));
+            buf[buf_position][0] = '\0';
+            buf_position++;
 
             char **tmp = (char **)malloc(sizeof(char *)*buf_position);
             long int j;
             for(j = 0; j < buf_position; j++)
                 tmp[j] = buf[j];
-            tmp[j] = tokens[i];
 
             if(lines_position == lines_size)
             {
@@ -356,25 +341,16 @@ char ***split_command_lines(char **tokens, long int ntokens, long int *nlines)
         }
         else
         {
-            if(buf_position == buf_size)
-            {
-                buf_size *= 2;
-                buf = (char **)realloc((void *)buf,
-                    sizeof(char *)*buf_size);
-            }
-
             buf[buf_position] = tokens[i];
             buf_position++;
         }
     }
 
-
     if(buf_position > 0)
     {
-
         if(s > 0)
         {
-            fprintf(stderr, "Syntax error!");
+            fprintf(stderr, "Syntax error!\n");
             exit(1);
         }
 
@@ -384,8 +360,8 @@ char ***split_command_lines(char **tokens, long int ntokens, long int *nlines)
         long int j;
         for(j = 0; j < buf_position-1; j++)
             tmp[j] = buf[j];
-        tmp[j] = malloc(sizeof(char));
-
+        
+        tmp[j] = (char *)malloc(sizeof(char));
         tmp[j][0] = '\0';
 
         if(lines_position == lines_size)
@@ -399,24 +375,24 @@ char ***split_command_lines(char **tokens, long int ntokens, long int *nlines)
         lines_position++;
     }
 
+    free(buf);
     *nlines = lines_position;
     return lines;
 }
 
 static
-command_t *generate_commands(char **line, long int ntokens)
+command_t *generate_commands(char **line)
 {
     state s = NULL_STATE;
     command_t c = malloc(sizeof(struct command));
 
     long int i;
-    for(i = 0; i < ntokens; i++)
+    for(i = 0; line[i][0] != '\0'; i++)
     {
+        printf("%s\n", line[i]);
         state old_s = s;
-        int delta = get_state(&s, line[i][0]);
+        get_state(&s, line[i][0]);
         
-        if(delta == 0)
-        {
             // i++;
             // check whether i is still within the bounds
             // take the token
@@ -425,11 +401,18 @@ command_t *generate_commands(char **line, long int ntokens)
             // that we are in the simple state for the next iteration
             // NEED: SIMPLE_COMMAND COUNTER THAT RESETS UPON COMPLETION
 
-        }
-
     }
     return NULL;
 }
+
+/* We're going to skimp out on having two separate stack classes here:
+    a command with command_type SUBSHELL_COMMAND can fall under two categories.
+        1. status = 0 -> '('
+        2. status = 1 -> ')' */
+
+/*  SIMPLE_STATE, INPUT_STATE, OUTPUT_STATE, AND_STATE, OR_STATE,
+    OPEN_SUBSHELL_STATE, CLOSE_SUBSHELL_STATE, SEQUENCE_STATE,
+    NEWLINE_STATE, COMMENT_STATE, NULL_STATE */
 
 static
 void populate_stacks(char **tokens, long int ntokens,
@@ -483,7 +466,9 @@ make_command_stream (int (*get_next_byte) (void *),
         printf("%lu: %s\n", j, tokens[j]);
     }
     */
-
+    
+    long int necessary_counter = 0;
+    
     // split_command_lines debug
     for(j = 0; j < nlines; j++)
     {
@@ -492,11 +477,26 @@ make_command_stream (int (*get_next_byte) (void *),
         for(k = 0; lines[j][k][0] != '\0'; k++)
         {
             printf("(%lu, %lu): %s\n", j, k, lines[j][k]);
+            long int l;
+            for(l = 0; lines[j][k][l] != '\0'; l++)
+                necessary_counter++;
+            necessary_counter+=9;
         }
+        necessary_counter+=9;
     }
-   
 
-  return 0;
+    // printf("Allocations counter (bytes): %lu\n",necessary_counter);
+
+    
+
+/*
+    for(j = 0; j < nlines; j++)
+    {
+        generate_commands(lines[j]);
+    }
+*/ 
+
+    return 0;
 }
 
 command_t
