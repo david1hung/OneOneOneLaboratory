@@ -27,7 +27,6 @@ struct command_stream {
 
 struct node {
     command_t command;
-    char **payload;
     struct node *next;
 };
 
@@ -67,6 +66,40 @@ command_t pop(struct stack *s)
     command_t c = n->command;
     free(n);
     return c;
+}
+
+static
+void parse_stack(struct stack *s)
+{
+    if(s->head == NULL)
+    {
+        fprintf(stderr, "Parse failed: empty stack.\n");
+        return;
+    }
+
+    struct node *n = s->head;
+    long int count = 0;
+
+    while(n != NULL)
+    {
+        printf("Node %lu\n",count);
+        if(n->command->type = SIMPLE_COMMAND)
+        {
+            if(n->command->input != NULL)
+                printf("    Input: %s\n",n->command->input);
+            if(n->command->output != NULL)
+                printf("    Output: %s\n",n->command->output);
+
+            printf("    Command and arguments are: \n",n->command->input);
+
+            long int i;
+            for(i = 0; n->command->u.word[i][0] != '\0'; i++)
+                printf("        %s\n",n->command->u.word[i]);
+            
+        }
+        count++;
+        n = n->next;
+    }
 }
 
 static
@@ -293,6 +326,8 @@ char ***split_command_lines(char **tokens, long int ntokens, long int *nlines)
     state s = NULL_STATE;
     long int l;
 
+    long int line_number = 1;
+
     long int i;
     for(i = 0; i < ntokens; i++)
     {
@@ -305,6 +340,13 @@ char ***split_command_lines(char **tokens, long int ntokens, long int *nlines)
       
         get_state(&s, tokens[i][0]);
         l = get_token_length(tokens[i]);
+        
+        if(s == NEWLINE_STATE)
+        {
+            line_number += l;
+        }
+
+
         if(s == NEWLINE_STATE && l > 1 && i > 0)
         {
             state s_prev = NULL_STATE;
@@ -350,7 +392,7 @@ char ***split_command_lines(char **tokens, long int ntokens, long int *nlines)
     {
         if(s > 0)
         {
-            fprintf(stderr, "Syntax error!\n");
+            fprintf(stderr, "%lu: syntax error\n", line_number);
             exit(1);
         }
 
@@ -392,6 +434,8 @@ command_t *generate_commands(char **line)
         printf("%s\n", line[i]);
         state old_s = s;
         get_state(&s, line[i][0]);
+
+
         
             // i++;
             // check whether i is still within the bounds
@@ -405,20 +449,175 @@ command_t *generate_commands(char **line)
     return NULL;
 }
 
-/* We're going to skimp out on having two separate stack classes here:
-    a command with command_type SUBSHELL_COMMAND can fall under two categories.
-        1. status = 0 -> '('
-        2. status = 1 -> ')' */
 
 /*  SIMPLE_STATE, INPUT_STATE, OUTPUT_STATE, AND_STATE, OR_STATE,
     OPEN_SUBSHELL_STATE, CLOSE_SUBSHELL_STATE, SEQUENCE_STATE,
     NEWLINE_STATE, COMMENT_STATE, NULL_STATE */
 
+
+// Here, let line_number be the line number that this line begins on.
+//  This will work so long as you always cycle through the lines
+//  sequentially. This allows us to abstract the stack-populating process
+//  to individual lines.
+
 static
-void populate_stacks(char **tokens, long int ntokens,
-    struct stack *op, struct stack *cmd)
+void populate_stacks(char **line, long int *line_number, struct stack *op,
+                        struct stack *cmd)
 {
-    /* ... */
+    if(op == NULL)
+    {
+        op = (struct stack *)malloc(sizeof(struct stack));
+        init_stack(op);
+    }
+
+    if(cmd == NULL)
+    {
+        cmd = (struct stack *)malloc(sizeof(struct stack));
+        init_stack(cmd);
+    }
+
+    command_t c;
+
+    bool processing_simple_command = false;
+    long int word_size = 10;
+    long int word_position = 0;
+
+    state s = NULL_STATE;
+    long int len = 0;
+
+    long int i;
+    for(i = 0; line[i][0] != '\0'; i++)
+    {
+        get_state(&s, line[i][0]);
+
+        switch(s)
+        {
+            case SIMPLE_STATE:
+            {
+                if(!processing_simple_command)
+                {
+                    c = (command_t)malloc(sizeof(struct command));
+                    c->type = SIMPLE_COMMAND;
+                    c->u.word = (char **)malloc(sizeof(char *)*word_size);
+                    
+                    c->u.word[word_position] = line[i];
+                    word_position++;
+
+                    push(op, c);
+                    processing_simple_command = true;
+
+                }
+                else
+                {
+                    c = pop(op);
+
+                    if(word_size == word_position)
+                    {
+                        word_size *= 2;
+                        c->u.word = (char **)realloc((void *)c->u.word,
+                            sizeof(char *)*word_size);
+                    }
+
+                    c->u.word[word_position] = line[i];
+                    push(op, c);
+
+                    word_position++;
+                }
+                break;
+            }
+            case INPUT_STATE:
+            {
+                if(!processing_simple_command)
+                {
+                    fprintf(stderr, "1. Syntax error.\n");
+                    exit(1);
+                }
+                else
+                {
+                    free(line[i]);
+                    i++;
+
+                    // I could add '\0' to NULL_STATE but I want to make
+                    //  it explicit that this is the end-of-line token.
+
+                    if(line[i][0] != '\0')
+                    {
+                        get_state(&s, line[i][0]);
+                        if(s == SIMPLE_STATE)
+                        {
+                            c = pop(op);
+                            c->input = line[i];
+                            push(op, c);
+                        }
+                        else
+                        {
+                            fprintf(stderr, "2. Syntax error.\n");
+                            exit(1);
+                        }
+                    }
+                    else
+                    {
+                        fprintf(stderr, "3. Syntax error.\n");
+                        exit(1);
+                    }
+                }
+                break;
+            }
+            case OUTPUT_STATE:
+            {
+                if(!processing_simple_command)
+                {
+                    fprintf(stderr, "4. Syntax error.\n");
+                    exit(1);
+                }
+                else
+                {
+                    free(line[i]);
+                    i++;
+
+                    // I could add '\0' to NULL_STATE but I want to make
+                    //  it explicit that this is the end-of-line token.
+
+                    if(line[i][0] != '\0')
+                    {
+                        get_state(&s, line[i][0]);
+
+                        if(s == SIMPLE_STATE)
+                        {
+                            c = pop(op);
+                            c->output = line[i];
+                            push(op, c);
+                        }
+                        else
+                        {
+                            fprintf(stderr, "5. Syntax error.\n");
+                            exit(1);
+                        }
+                    }
+                    else
+                    {
+                        fprintf(stderr, "6. Syntax error.\n");
+                        exit(1);
+                    }
+                }
+                break;
+            }
+        }
+    }
+
+    if(processing_simple_command)
+    {
+        if(word_size == word_position)
+        {
+            word_size *= 2;
+            c->u.word = (char **)realloc((void *)c->u.word,
+                sizeof(char *)*word_size);
+        }
+
+        c->u.word[word_position] = (char *)malloc(sizeof(char));
+        c->u.word[word_position][0] = '\0';
+    }
+
 }
 
 
@@ -434,38 +633,53 @@ make_command_stream (int (*get_next_byte) (void *),
     char **tokens = get_tokens(get_next_byte,
         get_next_byte_argument, &ntokens);
 
+    long int nlines;
+    char ***lines = split_command_lines(tokens, ntokens, &nlines);
+    free(tokens);
+
+    debug_lines(lines, nlines);
+
     struct stack op;
     init_stack(&op);
 
     struct stack cmd;
     init_stack(&cmd);
 
-    long int nlines;
-    char ***lines = split_command_lines(tokens, ntokens, &nlines);
-    free(tokens);
+    long int line_number = 1;
 
-    /*
-    populate_stacks(tokens, ntokens, &op, &cmd);
-    
-    char hello[] = "helloes\n";
-    command_t c = (command_t)malloc(sizeof(struct command));
-    c->input = hello;
-
-    push(&op, c);
-    command_t d = pop(&op);
-    printf("%s", d->input);
-    */
-
-    
     long int j;
-    
-    /*
-    // get_tokens debug
+    for(j = 0; j < nlines; j++)
+    {
+        populate_stacks(lines[j], &line_number, &op, &cmd);
+        printf("Command line %lu\n", j);
+    }
+
+    parse_stack(&op);
+
+    return 0;
+}
+
+command_t
+read_command_stream (command_stream_t s)
+{
+  /* FIXME: Replace this with your implementation too.  */
+  // error (1, 0, "command reading not yet implemented");
+  return 0;
+}
+
+// DEBUG FUNCTIONS
+void debug_tokens(char **tokens, long int ntokens)
+{
+    long int j;
     for(j = 0; j < ntokens; j++)
     {
         printf("%lu: %s\n", j, tokens[j]);
     }
-    */
+}
+
+int debug_lines(char ***lines, long int nlines)
+{
+    long int j;
     
     long int necessary_counter = 0;
     
@@ -485,24 +699,7 @@ make_command_stream (int (*get_next_byte) (void *),
         necessary_counter+=9;
     }
 
-    // printf("Allocations counter (bytes): %lu\n",necessary_counter);
+    printf("Allocations counter (bytes): %lu\n",necessary_counter);
 
-    
-
-/*
-    for(j = 0; j < nlines; j++)
-    {
-        generate_commands(lines[j]);
-    }
-*/ 
-
-    return 0;
-}
-
-command_t
-read_command_stream (command_stream_t s)
-{
-  /* FIXME: Replace this with your implementation too.  */
-  // error (1, 0, "command reading not yet implemented");
-  return 0;
+    return necessary_counter;
 }
