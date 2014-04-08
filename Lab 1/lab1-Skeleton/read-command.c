@@ -466,6 +466,7 @@ char ***split_command_lines(char **tokens, long int ntokens, long int *nlines)
     char **buf = (char **)malloc(sizeof(char *)*buf_size);
 
     state s = NULL_STATE;
+	state s_prev = NULL_STATE;
     long int l;
 
     long int line_number = 1;
@@ -480,6 +481,7 @@ char ***split_command_lines(char **tokens, long int ntokens, long int *nlines)
                 sizeof(char *)*buf_size);
         }
       
+		s_prev = s;
         get_state(&s, tokens[i][0]);
         l = get_token_length(tokens[i]);
         
@@ -489,10 +491,7 @@ char ***split_command_lines(char **tokens, long int ntokens, long int *nlines)
         }
 
         if(s == NEWLINE_STATE && l > 1 && i > 0)
-        {
-            state s_prev = NULL_STATE;
-            get_state(&s_prev, tokens[i-1][0]);
-
+        {	
             if(s_prev/3 > 0)
             {
                 buf[buf_position] = tokens[i];
@@ -501,6 +500,8 @@ char ***split_command_lines(char **tokens, long int ntokens, long int *nlines)
             }
 
             free(tokens[i]);
+			tokens[i] = NULL;
+
             buf[buf_position] = NULL;
             buf_position++;
 
@@ -527,12 +528,20 @@ char ***split_command_lines(char **tokens, long int ntokens, long int *nlines)
             buf_position++;
         }
     }
-
+	
     if(buf_position > 0)
     {
-        if(s > 0 && s != CLOSE_SUBSHELL_STATE && s != NEWLINE_STATE)
+		if(s == NEWLINE_STATE)
+		{
+			if(s_prev != SIMPLE_STATE && s_prev != SEQUENCE_STATE)
+			{
+				fprintf(stderr, "%lu: syntax error1\n", line_number);
+				exit(1);
+			}
+		}
+        else if(s > 0 && s != CLOSE_SUBSHELL_STATE) // Last iterated state
         {
-            fprintf(stderr, "%lu: syntax error\n", line_number);
+			fprintf(stderr, "%lu: syntax error2\n", line_number);
             exit(1);
         }
 
@@ -790,7 +799,7 @@ command_t generate_command_tree(char **line, long int *line_number)
         }
     }
 
-    if(processing_simple_command)
+    if(processing_simple_command && word_position > 0)
     {
         if(word_size == word_position)
         {
@@ -805,7 +814,7 @@ command_t generate_command_tree(char **line, long int *line_number)
     // parse_stack(cmd);
     // parse_stack(op);
 
-    while(top(op) != NULL)
+    while(top(op) != NULL && top(op)->type != SUBSHELL_COMMAND)
     {
         command_t tmp = pop(op);
         command_t cmd_b = pop(cmd);
@@ -816,6 +825,12 @@ command_t generate_command_tree(char **line, long int *line_number)
     }
 
     command_t tmp = pop(cmd);
+	
+	if(top(op) != NULL)
+	{
+		fprintf(stderr, "Missing ')'\n");
+		exit(1);
+	}
 
     free(op);
     free(cmd);
