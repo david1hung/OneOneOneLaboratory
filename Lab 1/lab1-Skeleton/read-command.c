@@ -154,7 +154,7 @@ void parse_stack(struct stack *s)
             printf("    Command and arguments are: \n",n->command->input);
 
             long int i;
-            for(i = 0; n->command->u.word[i] != NULL; i++)
+            for(i = 0; n->command->u.word[i]!= NULL; i++)
                 printf("        %s\n",n->command->u.word[i]);
             
         }
@@ -501,8 +501,7 @@ char ***split_command_lines(char **tokens, long int ntokens, long int *nlines)
             }
 
             free(tokens[i]);
-            buf[buf_position] = (char *)malloc(sizeof(char));
-            buf[buf_position][0] = '\0';
+            buf[buf_position] = NULL;
             buf_position++;
 
             char **tmp = (char **)malloc(sizeof(char *)*buf_position);
@@ -544,8 +543,7 @@ char ***split_command_lines(char **tokens, long int ntokens, long int *nlines)
         for(j = 0; j < buf_position-1; j++)
             tmp[j] = buf[j];
         
-        tmp[j] = (char *)malloc(sizeof(char));
-        tmp[j][0] = '\0';
+        tmp[j] = NULL;
 
         if(lines_position == lines_size)
         {
@@ -587,7 +585,7 @@ command_t generate_command_tree(char **line, long int *line_number)
     long int len = 0;
 
     long int i;
-    for(i = 0; line[i][0] != '\0'; i++)
+    for(i = 0; line[i] != NULL; i++)
     {
         get_extended_state(&s, line[i]);
 
@@ -639,10 +637,7 @@ command_t generate_command_tree(char **line, long int *line_number)
                     free(line[i]);
                     i++;
 
-                    // I could add '\0' to NULL_STATE but I want to make
-                    //  it explicit that this is the end-of-line token.
-
-                    if(line[i][0] != '\0')
+                    if(line[i] != NULL)
                     {
                         get_extended_state(&s, line[i]);
                         if(s == SIMPLE_STATE)
@@ -676,10 +671,7 @@ command_t generate_command_tree(char **line, long int *line_number)
                     free(line[i]);
                     i++;
 
-                    // I could add '\0' to NULL_STATE but I want to make
-                    //  it explicit that this is the end-of-line token.
-
-                    if(line[i][0] != '\0')
+                    if(line[i] != NULL)
                     {
                         get_extended_state(&s, line[i]);
 
@@ -709,7 +701,7 @@ command_t generate_command_tree(char **line, long int *line_number)
             } break;
             case NEWLINE_STATE:
             {
-                if(!processing_simple_command || line[i+1][0] == '\0')
+                if(!processing_simple_command || line[i+1] == NULL)
                 {
                     free(line[i]);
                     continue;
@@ -898,11 +890,11 @@ int debug_lines(char ***lines, long int nlines)
     {
         long int k;
         state s;
-        for(k = 0; lines[j][k][0] != '\0'; k++)
+        for(k = 0; lines[j][k] != NULL; k++)
         {
             printf("(%lu, %lu): %s\n", j, k, lines[j][k]);
             long int l;
-            for(l = 0; lines[j][k][l] != '\0'; l++)
+            for(l = 0; lines[j][k] != NULL; l++)
                 necessary_counter++;
             necessary_counter+=9;
         }
