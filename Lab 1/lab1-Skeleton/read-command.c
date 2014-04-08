@@ -154,7 +154,7 @@ void parse_stack(struct stack *s)
             printf("    Command and arguments are: \n",n->command->input);
 
             long int i;
-            for(i = 0; n->command->u.word[i][0] != '\0'; i++)
+            for(i = 0; n->command->u.word[i] != NULL; i++)
                 printf("        %s\n",n->command->u.word[i]);
             
         }
@@ -531,9 +531,8 @@ char ***split_command_lines(char **tokens, long int ntokens, long int *nlines)
 
     if(buf_position > 0)
     {
-        if(s > 0 && s != CLOSE_SUBSHELL_STATE)
+        if(s > 0 && s != CLOSE_SUBSHELL_STATE && s != NEWLINE_STATE)
         {
-            printf("%i\n",s);
             fprintf(stderr, "%lu: syntax error\n", line_number);
             exit(1);
         }
@@ -710,7 +709,7 @@ command_t generate_command_tree(char **line, long int *line_number)
             } break;
             case NEWLINE_STATE:
             {
-                if(!processing_simple_command)
+                if(!processing_simple_command || line[i+1][0] == '\0')
                 {
                     free(line[i]);
                     continue;
@@ -735,8 +734,7 @@ command_t generate_command_tree(char **line, long int *line_number)
                             sizeof(char *)*word_size);
                     }
 
-                    c->u.word[word_position] = (char *)malloc(sizeof(char));
-                    c->u.word[word_position][0] = '\0';
+                    c->u.word[word_position] = NULL;
                     word_position = 0;
                 }
 
@@ -809,8 +807,7 @@ command_t generate_command_tree(char **line, long int *line_number)
                 sizeof(char *)*word_size);
         }
 
-        c->u.word[word_position] = (char *)malloc(sizeof(char));
-        c->u.word[word_position][0] = '\0';
+        c->u.word[word_position] = NULL;
     }
 
     // parse_stack(cmd);
@@ -877,6 +874,7 @@ command_t
 read_command_stream (command_stream_t s)
 {
     return dequeue(s);
+    // return 0;
 }
 
 // DEBUG FUNCTIONS
