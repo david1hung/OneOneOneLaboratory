@@ -853,8 +853,8 @@ command_t generate_command_tree(char **line, long int *line_number)
         c->u.word[word_position] = NULL;
     }
 
-    // parse_stack(cmd);
-    // parse_stack(op);
+    parse_stack(cmd);
+    parse_stack(op);
 
     while(top(op) != NULL && top(op)->type != SUBSHELL_COMMAND)
     {
@@ -887,6 +887,12 @@ command_t generate_command_tree(char **line, long int *line_number)
 			fprintf(stderr, "%lu: '(' missing matching ')'\n", open_p[nopen_p]);
 		else
 			fprintf(stderr, "%lu: syntax error\n", *line_number);
+		exit(1);
+	}
+	
+	if(top(cmd) != NULL)
+	{
+		fprintf(stderr, "%lu: Ran out of operands\n", *line_number);
 		exit(1);
 	}
 
