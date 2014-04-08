@@ -17,8 +17,8 @@
 
 typedef enum {
     SIMPLE_STATE, INPUT_STATE, OUTPUT_STATE, NEWLINE_STATE, SEQUENCE_STATE,
-        AND_STATE, OR_STATE, OPEN_SUBSHELL_STATE, CLOSE_SUBSHELL_STATE,
-        COMMENT_STATE, NULL_STATE
+        AND_STATE, OR_STATE, PIPE_STATE, OPEN_SUBSHELL_STATE,
+        CLOSE_SUBSHELL_STATE, MULTI_NEWLINE_STATE, COMMENT_STATE, NULL_STATE
 } state;
 
 struct command_stream {
@@ -186,7 +186,7 @@ static
 void get_state(state *s, char c)
 {
     if(s == NULL)
-        printf("Yep.\n");
+        return;
 
     state s_old = *s;
     needs_splitting(s, c);
@@ -434,34 +434,6 @@ char ***split_command_lines(char **tokens, long int ntokens, long int *nlines)
     return lines;
 }
 
-static
-command_t *generate_commands(char **line)
-{
-    state s = NULL_STATE;
-    command_t c = malloc(sizeof(struct command));
-
-    long int i;
-    for(i = 0; line[i][0] != '\0'; i++)
-    {
-        printf("%s\n", line[i]);
-        state old_s = s;
-        get_state(&s, line[i][0]);
-
-
-        
-            // i++;
-            // check whether i is still within the bounds
-            // take the token
-
-            // if we *just* enter a simple state, we need to note
-            // that we are in the simple state for the next iteration
-            // NEED: SIMPLE_COMMAND COUNTER THAT RESETS UPON COMPLETION
-
-    }
-    return NULL;
-}
-
-
 /*  SIMPLE_STATE, INPUT_STATE, OUTPUT_STATE, AND_STATE, OR_STATE,
     OPEN_SUBSHELL_STATE, CLOSE_SUBSHELL_STATE, SEQUENCE_STATE,
     NEWLINE_STATE, COMMENT_STATE, NULL_STATE */
@@ -673,6 +645,14 @@ void populate_stacks(char **line, long int *line_number, struct stack *op,
 }
 
 
+static
+command_t *generate_command_tree(struct stack *op, struct stack *cmd)
+{
+    state s = NULL_STATE;
+    command_t c = malloc(sizeof(struct command));
+    return NULL;
+}
+
 command_stream_t
 make_command_stream (int (*get_next_byte) (void *),
              void *get_next_byte_argument)
@@ -702,7 +682,9 @@ make_command_stream (int (*get_next_byte) (void *),
     long int j;
     for(j = 0; j < nlines; j++)
     {
+
         populate_stacks(lines[j], &line_number, &op, &cmd);
+
         printf("Command line %lu\n", j);
     }
 
