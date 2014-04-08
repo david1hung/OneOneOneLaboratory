@@ -316,12 +316,13 @@ enum command_type state_to_command(state s)
     }
 }
 
+// Returns length of token. -1 if error.
 static
 long int validate_token(char *token)
 {
     state s = NULL_STATE;
     char c0 = token[0];
-    needs_splitting(&s, c0);
+    bool valid = needs_splitting(&s, c0);
 
     if(s == AND_STATE || s == OR_STATE || s == NEWLINE_STATE)
     {
@@ -330,8 +331,7 @@ long int validate_token(char *token)
         {
             if(k == 2 && s != NEWLINE_STATE)
             {
-                fprintf(stderr, "Syntax error: {|...|, &...&}\n");
-                exit(1);
+                return -1;
             }
         }
 
@@ -339,15 +339,19 @@ long int validate_token(char *token)
         {
             if(k != 2)
             {
-                fprintf(stderr, "Syntax error: {&}\n");
-                exit(1);
+                return -1;
             }
         }
 
         return k;
     }
-}
+	
+	if(!valid)
+	{
+		return -1;
+	}
 
+}
 
 static
 char **get_tokens(int (*get_next_byte) (void *), 
@@ -362,10 +366,21 @@ char **get_tokens(int (*get_next_byte) (void *),
     long int buf_position = 0;
     long int buf_size = 216;
     char *buf = (char *)malloc(sizeof(char)*buf_size);
+	
+	long int newlines = 1;
 
     bool encountered_comment = false;
     while((c = get_next_byte(get_next_byte_argument)) > 0)
     {   
+		if(c == '\n')
+			newlines++;
+		
+		if(c == '`')
+		{
+			fprintf(stderr, "%lu: Invalid character\n",newlines);
+			exit(1);
+		}
+		
         if(c == '#')
         {
             encountered_comment = true;
@@ -402,7 +417,11 @@ char **get_tokens(int (*get_next_byte) (void *),
                     tmp[i] = buf[i];
                 tmp[i] = '\0';
 
-                validate_token(tmp);
+                if(validate_token(tmp) == -1)
+				{
+					fprintf(stderr, "%lu: Invalid operand\n",newlines);
+					exit(1);
+				}
 
                 if(tokens_position == tokens_size)
                 {
@@ -434,7 +453,11 @@ char **get_tokens(int (*get_next_byte) (void *),
             tmp[i] = buf[i];
         tmp[i] = '\0';
 
-        validate_token(tmp);
+        if(validate_token(tmp) == -1)
+		{
+			fprintf(stderr, "%lu: Invalid operand\n",newlines);
+			exit(1);
+		}
 
         if(tokens_position == tokens_size)
         {
@@ -452,8 +475,6 @@ char **get_tokens(int (*get_next_byte) (void *),
     return tokens;
 }
 
-
-/* NOTE: each line ends with an '\0' rather than '\n\n\0' */
 static
 char ***split_command_lines(char **tokens, long int ntokens, long int *nlines)
 {
@@ -499,11 +520,18 @@ char ***split_command_lines(char **tokens, long int ntokens, long int *nlines)
                 continue;
             }
 
-            free(tokens[i]);
-			tokens[i] = NULL;
-
-            buf[buf_position] = NULL;
+            buf[buf_position] = tokens[i];
             buf_position++;
+			
+			if(buf_position == buf_size)
+			{
+				buf_size *= 2;
+				buf = (char **)realloc((void *)buf,
+                sizeof(char *)*buf_size);
+			}
+			
+			buf[buf_position] = NULL;
+			buf_position++;
 
             char **tmp = (char **)malloc(sizeof(char *)*buf_position);
             long int j;
@@ -533,15 +561,15 @@ char ***split_command_lines(char **tokens, long int ntokens, long int *nlines)
     {
 		if(s == NEWLINE_STATE)
 		{
-			if(s_prev != SIMPLE_STATE && s_prev != SEQUENCE_STATE)
+			if(s_prev != SIMPLE_STATE && s_prev != SEQUENCE_STATE && s_prev != CLOSE_SUBSHELL_STATE)
 			{
-				fprintf(stderr, "%lu: syntax error1\n", line_number);
+				fprintf(stderr, "%lu: Missing command or input/output file\n", line_number);
 				exit(1);
 			}
 		}
         else if(s > 0 && s != CLOSE_SUBSHELL_STATE) // Last iterated state
         {
-			fprintf(stderr, "%lu: syntax error2\n", line_number);
+			fprintf(stderr, "%lu: Missing command or input/output file\n", line_number);
             exit(1);
         }
 
@@ -592,11 +620,18 @@ command_t generate_command_tree(char **line, long int *line_number)
 
     state s = NULL_STATE;
     long int len = 0;
+	
+	long int open_p[128];
+	long int nopen_p = 0;
 
     long int i;
     for(i = 0; line[i] != NULL; i++)
     {
         get_extended_state(&s, line[i]);
+		if(s == NEWLINE_STATE || s == MULTI_NEWLINE_STATE)
+		{
+			*line_number += get_token_length(line[i]);
+		}
 
         switch(s)
         {
@@ -638,7 +673,7 @@ command_t generate_command_tree(char **line, long int *line_number)
             {
                 if(!processing_simple_command)
                 {
-                    fprintf(stderr, "1. Syntax error.\n");
+                    fprintf(stderr, "%lu: < into non-command is invalid\n", *line_number);
                     exit(1);
                 }
                 else
@@ -657,13 +692,13 @@ command_t generate_command_tree(char **line, long int *line_number)
                         }
                         else
                         {
-                            fprintf(stderr, "2. Syntax error.\n");
+                            fprintf(stderr, "%lu: Invalid input file\n", *line_number);
                             exit(1);
                         }
                     }
                     else
                     {
-                        fprintf(stderr, "3. Syntax error.\n");
+                        fprintf(stderr, "%lu: No input file specified\n", *line_number);
                         exit(1);
                     }
                 }
@@ -672,7 +707,7 @@ command_t generate_command_tree(char **line, long int *line_number)
             {
                 if(!processing_simple_command)
                 {
-                    fprintf(stderr, "4. Syntax error.\n");
+                    fprintf(stderr, "%lu: > into non-command is invalid\n", *line_number);
                     exit(1);
                 }
                 else
@@ -692,13 +727,13 @@ command_t generate_command_tree(char **line, long int *line_number)
                         }
                         else
                         {
-                            fprintf(stderr, "5. Syntax error.\n");
+                            fprintf(stderr, "%lu: Invalid output file\n", *line_number);
                             exit(1);
                         }
                     }
                     else
                     {
-                        fprintf(stderr, "6. Syntax error.\n");
+                        fprintf(stderr, "%lu: No output file specified\n", *line_number);
                         exit(1);
                     }
                 }
@@ -721,8 +756,7 @@ command_t generate_command_tree(char **line, long int *line_number)
                 // Start with SIMPLE_COMMAND completion logic
                 if(!processing_simple_command && s != OPEN_SUBSHELL_STATE)
                 {
-                    printf("(7) broke here: %i\n", s);
-                    fprintf(stderr, "7. Syntax error.\n");
+                    fprintf(stderr, "%lu: Missing command before operand\n", *line_number);
                     exit(1);
                 }
 
@@ -754,7 +788,7 @@ command_t generate_command_tree(char **line, long int *line_number)
 
                     if(top(op) == NULL)
                     {
-                        fprintf(stderr, "Missing '('\n");
+                        fprintf(stderr, "%lu: ')' missing matching '('\n", *line_number);
                         exit(1);
                     }
 
@@ -764,13 +798,21 @@ command_t generate_command_tree(char **line, long int *line_number)
                         command_t subshell = pop(cmd);
                         tmp->u.subshell_command = subshell;
                         push(cmd, tmp);
+						
+						nopen_p--;
                         continue;
                     }
                 }
 
                 processing_simple_command = false;
-
+				
                 // Then create the relevant command struct
+				if(s == OPEN_SUBSHELL_STATE)
+				{
+					open_p[nopen_p] = *line_number;
+					nopen_p++;
+				}
+				
                 c = (command_t)malloc(sizeof(struct command));
                 c->type = state_to_command(s);
                 c->input = NULL;
@@ -819,16 +861,32 @@ command_t generate_command_tree(char **line, long int *line_number)
         command_t tmp = pop(op);
         command_t cmd_b = pop(cmd);
         command_t cmd_a = pop(cmd);
-        tmp->u.command[0] = cmd_a;
-        tmp->u.command[1] = cmd_b;
-        push(cmd, tmp);
+		
+		if(cmd_a == NULL || cmd_b == NULL)
+		{
+			if(cmd_a != NULL)
+				push(cmd, cmd_a);
+			
+			if(cmd_b != NULL)
+				push(cmd, cmd_b);
+		}
+		else
+		{
+		    tmp->u.command[0] = cmd_a;
+			tmp->u.command[1] = cmd_b;
+			push(cmd, tmp);
+		}
     }
 
     command_t tmp = pop(cmd);
 	
 	if(top(op) != NULL)
 	{
-		fprintf(stderr, "Missing ')'\n");
+		nopen_p--;
+		if(nopen_p >= 0)
+			fprintf(stderr, "%lu: '(' missing matching ')'\n", open_p[nopen_p]);
+		else
+			fprintf(stderr, "%lu: syntax error\n", *line_number);
 		exit(1);
 	}
 
