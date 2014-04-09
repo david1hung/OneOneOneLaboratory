@@ -561,15 +561,18 @@ char ***split_command_lines(char **tokens, long int ntokens, long int *nlines)
     {
 		if(s == NEWLINE_STATE)
 		{
-			if(s_prev != SIMPLE_STATE && s_prev != SEQUENCE_STATE && s_prev != CLOSE_SUBSHELL_STATE)
+			if(s_prev != SIMPLE_STATE && s_prev != SEQUENCE_STATE &&
+                 s_prev != CLOSE_SUBSHELL_STATE)
 			{
-				fprintf(stderr, "%lu: Missing command or input/output file\n", line_number);
+				fprintf(stderr, "%lu: Missing command or input/output file\n",
+                    line_number);
 				exit(1);
 			}
 		}
         else if(s > 0 && s != CLOSE_SUBSHELL_STATE) // Last iterated state
         {
-			fprintf(stderr, "%lu: Missing command or input/output file\n", line_number);
+			fprintf(stderr, "%lu: Missing command or input/output file\n",
+                line_number);
             exit(1);
         }
 
@@ -673,7 +676,8 @@ command_t generate_command_tree(char **line, long int *line_number)
             {
                 if(!processing_simple_command)
                 {
-                    fprintf(stderr, "%lu: < into non-command is invalid\n", *line_number);
+                    fprintf(stderr, "%lu: < into non-command is invalid\n",
+                        *line_number);
                     exit(1);
                 }
                 else
@@ -692,13 +696,15 @@ command_t generate_command_tree(char **line, long int *line_number)
                         }
                         else
                         {
-                            fprintf(stderr, "%lu: Invalid input file\n", *line_number);
+                            fprintf(stderr, "%lu: Invalid input file\n",
+                                *line_number);
                             exit(1);
                         }
                     }
                     else
                     {
-                        fprintf(stderr, "%lu: No input file specified\n", *line_number);
+                        fprintf(stderr, "%lu: No input file specified\n",
+                            *line_number);
                         exit(1);
                     }
                 }
@@ -707,7 +713,8 @@ command_t generate_command_tree(char **line, long int *line_number)
             {
                 if(!processing_simple_command)
                 {
-                    fprintf(stderr, "%lu: > into non-command is invalid\n", *line_number);
+                    fprintf(stderr, "%lu: > into non-command is invalid\n",
+                        *line_number);
                     exit(1);
                 }
                 else
@@ -727,13 +734,15 @@ command_t generate_command_tree(char **line, long int *line_number)
                         }
                         else
                         {
-                            fprintf(stderr, "%lu: Invalid output file\n", *line_number);
+                            fprintf(stderr, "%lu: Invalid output file\n",
+                                *line_number);
                             exit(1);
                         }
                     }
                     else
                     {
-                        fprintf(stderr, "%lu: No output file specified\n", *line_number);
+                        fprintf(stderr, "%lu: No output file specified\n",
+                            *line_number);
                         exit(1);
                     }
                 }
@@ -756,7 +765,8 @@ command_t generate_command_tree(char **line, long int *line_number)
                 // Start with SIMPLE_COMMAND completion logic
                 if(!processing_simple_command && s != OPEN_SUBSHELL_STATE)
                 {
-                    fprintf(stderr, "%lu: Missing command before operand\n", *line_number);
+                    fprintf(stderr, "%lu: Missing command before operand\n",
+                        *line_number);
                     exit(1);
                 }
 
@@ -788,7 +798,8 @@ command_t generate_command_tree(char **line, long int *line_number)
 
                     if(top(op) == NULL)
                     {
-                        fprintf(stderr, "%lu: ')' missing matching '('\n", *line_number);
+                        fprintf(stderr, "%lu: ')' missing matching '('\n",
+                            *line_number);
                         exit(1);
                     }
 
@@ -853,8 +864,8 @@ command_t generate_command_tree(char **line, long int *line_number)
         c->u.word[word_position] = NULL;
     }
 
-    parse_stack(cmd);
-    parse_stack(op);
+    // parse_stack(cmd);
+    // parse_stack(op);
 
     while(top(op) != NULL && top(op)->type != SUBSHELL_COMMAND)
     {
@@ -918,7 +929,7 @@ make_command_stream (int (*get_next_byte) (void *),
 
     long int nlines;
     char ***lines = split_command_lines(tokens, ntokens, &nlines);
-    // free(tokens);
+    free(tokens);
 
     
     // debug_lines(lines, nlines);
@@ -936,7 +947,7 @@ make_command_stream (int (*get_next_byte) (void *),
         enqueue(cstream, generate_command_tree(lines[j], &line_number));
     }
 
-    // free(lines);
+    free(lines);
 
     return cstream;
 }

@@ -1,4 +1,36 @@
-This is a skeleton for CS 111 Lab 1.
+CS111 LAB 1A README
+Victor Kwan: 004151151
+David Hung: 604191130
 
-Replace this README file with notes on your implementation.
-Mentions any special features or limitations.
+This implementation of make_command_stream is a fairly comprehensive look on 
+	the requirements of the spec. It performs admirably on all of the test 
+	cases (tested on both the SEASnet machines and Ubuntu on gcc version 4.8.1
+	) and also addresses some of the concerns not necessarily tested in the 
+	test cases. It also manages memory to a fairly reliable degree, so it 
+	doesn't simply sap away at our memory resources. Perhaps the clunkiest 
+	part of the implementation is to do with some of the error case checking: 
+	an input of ">\n" is seemingly more concerned with the lack of 
+	input/output as opposed to the command it's tied to – but this is simply 
+	to do with the fact that our implementation checks for errors in all 
+	steps of the process.
+
+The function is broken down into three processes:
+1.	Tokenization
+	The tokenization process uses an enumerated "state" to determine if a 
+		boundary is encountered and splitting is required. The output is an 
+		array of cstrings.
+2.	Splitting into command lines
+	After tokenization, splitting the tokens into lines allows for easier 
+		processing of command lines into trees. The procedure is quite 
+		similar to that of tokenization, although on a larger scale, allowing 
+		us to perform even more error checks.
+3.	Generating the command trees
+	The generate_command_trees function operates through the use of stacks. 
+		The first part of the function serves to eat up tokens to form valid 
+		commands. The second part of the function is largely the 
+		implementation of an infix parsing of the commands and operands.
+4.	command_stream
+	We finish by putting each command into the command_stream queue. This 
+		appeared to be the most appropriate structure because 
+		read_command_stream merely needs to dequeue a node each time it is 
+		called.
