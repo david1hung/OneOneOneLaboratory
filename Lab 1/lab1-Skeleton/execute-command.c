@@ -71,13 +71,18 @@ void executingSimple(command_t c)
             }
 
             if(dup2(inputRedir,0) < 0)
+            {
+                fprintf(stderr,"Redirect error!\n",c->input);
                 _exit(1);
+            }
+            
+            close(inputRedir);
         }
     
         int outputRedir;
         if(c->output != NULL)
         {
-            outputRedir = open(c->output, O_WRONLY|O_CREAT|O_TRUNC);
+            outputRedir = open(c->output, O_WRONLY|O_CREAT|O_TRUNC, 0644);
             if(outputRedir < 0)
             {
                 fprintf(stderr,"Output error.\n");
@@ -85,8 +90,14 @@ void executingSimple(command_t c)
             }
         
             if(dup2(outputRedir,1) < 0)
+            {
+                fprintf(stderr,"Redirect error!\n",c->input);
                 _exit(1);
+            }
+            
+            close(outputRedir);
         }
+        
         
         execvp(c->u.word[0],c->u.word);
         fprintf(stderr, "execvp shouldn't have returned!\n");
