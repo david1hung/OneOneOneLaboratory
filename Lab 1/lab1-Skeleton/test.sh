@@ -1,1 +1,1 @@
-echo hello > b.txt
+echo hello <ine && echo ok

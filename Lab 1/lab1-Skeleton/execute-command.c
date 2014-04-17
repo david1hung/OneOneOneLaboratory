@@ -11,6 +11,7 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <fcntl.h>
 #include <sys/stat.h>
 
@@ -51,31 +52,184 @@ void execute_switch(command_t c)
 void executingSimple(command_t c)
 {
     pid_t p = fork();
+    int status;
+    int exit_status;
+    
     if(p < 0)
         error(1, errno, "fork was unsuccessful");
-    /*
-    int inputRedir;
-    if(c->input != NULL)
+    
+    if(p == 0)
     {
-        inputRedir = open(c->input, O_RDONLY);
-        if(inputRedir < 0)
-            exit(1);
-        if(dup2(inputRedir,0) < 0)
-            exit(1);
+        int inputRedir;
+        if(c->input != NULL)
+        {
+            inputRedir = open(c->input, O_RDONLY);
+            if(inputRedir < 0)
+            {
+                fprintf(stderr,"File %s is an invalid input!\n",c->input);
+                _exit(1);
+            }
+
+            if(dup2(inputRedir,0) < 0)
+                _exit(1);
+        }
+    
+        int outputRedir;
+        if(c->output != NULL)
+        {
+            outputRedir = open(c->output, O_WRONLY|O_CREAT|O_TRUNC);
+            if(outputRedir < 0)
+            {
+                fprintf(stderr,"Output error.\n");
+                _exit(1);
+            }
+        
+            if(dup2(outputRedir,1) < 0)
+                _exit(1);
+        }
+        
+        execvp(c->u.word[0],c->u.word);
+        fprintf(stderr, "execvp shouldn't have returned!\n");
+        _exit(1);
+    }
+    else
+    {
+        waitpid(p, &status, 0);
+        exit_status = WEXITSTATUS(status);
+        c->status = exit_status;
+        return;
+    }
+}
+
+void executingSubshell(command_t c)
+{
+	pid_t pid = fork();
+    int status;
+    
+   	if (pid < 0)
+    {
+		error(1, errno, "fork was unsuccessful");
     }
     
-    int outputRedir;
-    if(c->output != NULL)
+	if (pid == 0){
+		execute_switch(c->u.subshell_command);
+		_exit(c->u.subshell_command->status);
+	}
+    else
     {
-        outputRedir = open(c->output, O_WRONLY);
-        if(outputRedir < 0)
-            exit(1);
-        if(dup2(outputRedir,1) < 0)
-            exit(1);
+		waitpid(pid, &status, 0); // wait until child status is available
+		int exitStatus = WEXITSTATUS(status); // extract exit status of child process
+		c->status = exitStatus;
+		return;
     }
+}
+
+void executingAnd(command_t c)
+{
+	pid_t pid = fork();
+    int status;
     
-    execvp(c->u.word[0],c->u.word);
-    */
+   	if (pid < 0)
+    {
+		error(1, errno, "fork was unsuccessful");
+    }
+	
+	if (pid == 0){
+		execute_switch(c->u.command[0]);
+		_exit(c->u.command[0]->status);
+	}
+	
+	if (pid > 0) {
+		waitpid(pid, &status, 0); // wait until child status is available
+		int exitStatus = WEXITSTATUS(status); // extract exit status of child process
+
+		if (exitStatus == 0){ //if left run successfully
+			pid_t pid2 = fork(); 
+			if (pid2 == 0){
+				execute_switch(c->u.command[1]);
+				_exit(c->u.command[1]->status);
+			}
+			
+			if (pid2 > 0) {
+				waitpid(pid2, &status, 0); 
+				exitStatus = WEXITSTATUS(status);
+			}
+		}
+			
+		c->status = exitStatus;
+		return;
+	}
+}
+
+
+void executingOr(command_t c)
+{
+	pid_t pid = fork();
+    int status;
+    
+   	if (pid < 0)
+    {
+		error(1, errno, "fork was unsuccessful");
+    }
+	
+	if (pid == 0){
+		execute_switch(c->u.command[0]);
+		_exit(c->u.command[0]->status);
+	}
+	
+	if (pid > 0) {
+		waitpid(pid, &status, 0); // wait until child status is available
+		int exitStatus = WEXITSTATUS(status); // extract exit status of child process
+
+		if (exitStatus != 0){ //if left fails to run
+			pid_t pid2 = fork(); 
+			if (pid2 == 0){
+				execute_switch(c->u.command[1]);
+				_exit(c->u.command[1]->status);
+			}
+			
+			if (pid2 > 0) {
+				waitpid(pid2, &status, 0); 
+				exitStatus = WEXITSTATUS(status);
+			}
+		}
+			
+		c->status = exitStatus;
+		return;
+	}
+}
+
+void executingSequence(command_t c)
+{
+	pid_t pid = fork();
+    int status;
+    
+   	if (pid < 0)
+    {
+		error(1, errno, "fork was unsuccessful");
+    }
+	
+	if (pid == 0){
+		execute_switch(c->u.command[0]);
+		_exit(c->u.command[0]->status);
+	}
+	
+	if (pid > 0) {
+		waitpid(pid, &status, 0); // wait until child status is available
+
+		pid_t pid2 = fork(); 
+		if (pid2 == 0){
+			execute_switch(c->u.command[1]);
+			_exit(c->u.command[1]->status);
+		}
+		
+		if (pid2 > 0) {
+			waitpid(pid2, &status, 0); 
+			int exitStatus= WEXITSTATUS(status); // extract exit status of child process
+			c->status = exitStatus;
+			return;
+		}
+	}
 }
 
 void executingPipe(command_t c)
@@ -160,6 +314,11 @@ void executingPipe(command_t c)
 	}	
 }
 
+int
+command_status (command_t c)
+{
+  return c->status;
+}
 
 void
 execute_command (command_t c, bool time_travel)
