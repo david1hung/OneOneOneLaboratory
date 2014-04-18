@@ -24,6 +24,8 @@ void executingPipe(command_t c);
 
 void execute_switch(command_t c)
 {
+    c->status = -1;
+    
 	switch(c->type)
 	{
 	case SIMPLE_COMMAND:
