@@ -622,6 +622,7 @@ command_t generate_command_tree(char **line, long int *line_number)
     long int word_position = 0;
 
     state s = NULL_STATE;
+	state s_prev = NULL_STATE;
     long int len = 0;
 	
 	long int open_p[128];
@@ -630,6 +631,7 @@ command_t generate_command_tree(char **line, long int *line_number)
     long int i;
     for(i = 0; line[i] != NULL; i++)
     {
+		s_prev = s;
         get_extended_state(&s, line[i]);
 		if(s == NEWLINE_STATE || s == MULTI_NEWLINE_STATE)
 		{
@@ -765,9 +767,17 @@ command_t generate_command_tree(char **line, long int *line_number)
                 // Start with SIMPLE_COMMAND completion logic
                 if(!processing_simple_command && s != OPEN_SUBSHELL_STATE)
                 {
-                    fprintf(stderr, "%lu: Missing command before operand\n",
+					if(s_prev == SEQUENCE_STATE && s == CLOSE_SUBSHELL_STATE)
+					{
+						c = pop(op);
+						free(c);
+					}
+					else
+					{
+					    fprintf(stderr, "%lu: Missing command before operand\n",
                         *line_number);
-                    exit(1);
+						exit(1);
+					}
                 }
 
                 if(word_position > 0)
@@ -909,6 +919,7 @@ command_t generate_command_tree(char **line, long int *line_number)
 
     free(op);
     free(cmd);
+	free(line);
     
     tmp->status = -1;
 
