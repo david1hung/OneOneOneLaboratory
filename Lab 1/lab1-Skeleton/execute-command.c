@@ -436,12 +436,14 @@ struct dependency_node *remove_dependency_node(struct dependency_list *l, int ni
                 {
                     l->head = traversal->next;
                     tmp = traversal->next;
+                    free(traversal->dependencies);
                     free(traversal);
                 }
                 else
                 {
                     prev->next = traversal->next;
                     tmp = traversal->next;
+                    free(traversal->dependencies);
                     free(traversal);
                 }
                 
