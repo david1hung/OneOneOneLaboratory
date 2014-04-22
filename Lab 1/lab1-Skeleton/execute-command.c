@@ -1,3 +1,4 @@
+
 // UCLA CS 111 Lab 1 command execution
 
 #include "command.h"
@@ -341,8 +342,10 @@ command_status (command_t c)
 //  Dependency node for the dependency list. I don't think we need to touch any
 //      of it directly, you can interface with dependency-removal using the
 //      remove_dependency_node function.
+
 struct dependency_node {
-    int nid;
+    //int nid;
+    pid_t pid;
     command_t command;
 
     char *input[NODE_MAX];
@@ -350,9 +353,9 @@ struct dependency_node {
     char *output[NODE_MAX];
     int noutput;
 
-    int *dependencies;
-    int status; // 0 not yet run, 1 running.
-    pid_t pid;
+    //int *dependencies;
+    struct dependency_node *before_list[NODE_MAX]; //**
+    int list_size;
     
     struct dependency_node *next;
 };
@@ -386,12 +389,14 @@ void add_dependency_node(struct dependency_list *l, command_t c)
     struct dependency_node *node =
             (struct dependency_node *)malloc(sizeof(struct dependency_node));
 
-    node->nid = l->size;
+    //node->nid = l->size;
     node->command = c;
     node->ninput = 0;
     node->noutput = 0;
-    node->status = 0;
     node->next = NULL;
+
+    node->pid = -1; //**
+    node->list_size = 0; //**
     
     populate_input_output(node, c);
     
@@ -414,58 +419,13 @@ void add_dependency_node(struct dependency_list *l, command_t c)
     return;
 }
 
-//  remove_dependency_node is a two part process. It begins by deleting a node
-//      according to nid, and subsequently removes itself from the dependency
-//      lists of all subsequent nodes. Checking succeeding nodes is sufficient
-//      on the basis that you cannot depend on something you precede.
-struct dependency_node *remove_dependency_node(struct dependency_list *l, int nid)
-{
-    if(l->head == NULL) // In the case that the list is empty.
-        return NULL;
-    else // Otherwise ...
-    {
-        struct dependency_node *prev = NULL;
-        struct dependency_node *traversal = l->head;
-        while(traversal != NULL)
-        {
-            if(traversal->nid == nid)
-            {   
-                
-                struct dependency_node *tmp;
-                if(prev == NULL) // If it's the first node!
-                {
-                    l->head = traversal->next;
-                    tmp = traversal->next;
-                    free(traversal->dependencies);
-                    free(traversal);
-                }
-                else
-                {
-                    prev->next = traversal->next;
-                    tmp = traversal->next;
-                    free(traversal->dependencies);
-                    free(traversal);
-                }
-                
-                struct dependency_node *iter = tmp;
-                while(iter != NULL)
-                {
-                    if(iter->dependencies[nid] == 1)
-                        iter->dependencies[nid] = 0;
-                    iter = iter->next;
-                }
-                
-                (l->size)--;
-                return tmp;
-            }
-            
-            prev = traversal;
-            traversal = traversal->next;
-        }
-        
-        return prev->next;
-    }
-    return NULL;
+//  add_dependency **
+void add_dependency(struct dependency_node *cur, struct dependency_node *toAdd)
+{    
+    int size = cur->list_size;
+    cur->before_list[size] = toAdd;
+    (cur->list_size)++;
+    return;
 }
 
 //  populate_input_output is a helper function for add_dependency_node. The
@@ -544,14 +504,13 @@ void populate_dependency_list(struct dependency_list *l, command_t c)
         //  Note: probe_sequence_command abstractly serves to return a boolean
         //      value depending on whether there is a SEQUENCE_COMMAND in the
         //      current or descendent nodes.
-        if(!probe_sequence_command(c)) // SIMPLE, SUBSHELL_COMMAND
-        {
-            add_dependency_node(l, c);
+        if(!probe_sequence_command(c)) // If there aren't any for this node
+        {                              //     then this node is some form of
+            add_dependency_node(l, c); //     operand.
             return;
         }
         
-        //  Here, we can reasonably assume top-level operands are SEQUENCEs.
-        //      We probe left then right subtrees.
+        // We probe left then right subtrees.
         bool left_sequence = probe_sequence_command(c->u.command[0]);
         bool right_sequence = probe_sequence_command(c->u.command[1]);
         
@@ -561,11 +520,11 @@ void populate_dependency_list(struct dependency_list *l, command_t c)
             populate_dependency_list(l, c->u.command[0]);
         else
             add_dependency_node(l, c->u.command[0]);
-
+        
         if(right_sequence)
             populate_dependency_list(l, c->u.command[1]);      
         else
-            add_dependency_node(l, c->u.command[1]);
+            add_dependency_node(l, c->u.command[1]);  
     }
 }
 
@@ -602,6 +561,7 @@ struct dependency_list *get_dependency_list(command_t root)
     return list;
 }
 
+
 //  populate_dependencies populates the dependencies by following a pseudocode
 //      of the form:
 //      for each node
@@ -615,17 +575,6 @@ struct dependency_list *get_dependency_list(command_t root)
 void populate_dependencies(struct dependency_list *list)
 {
     struct dependency_node *node = list->head;
-    while(node != NULL)
-    {
-        //  We need this array to be list->size + 1 so that we can fit the
-        //      capping -1 for later iterating.
-        node->dependencies = (int *)malloc(sizeof(int)*(list->size + 1));
-        long int i;
-        for(i=0; i<list->size; i++)
-            node->dependencies[i] = 0;
-        node->dependencies[i] = -1;
-        node = node->next;
-    }
     
     node = list->head;
     while(node != NULL)
@@ -638,15 +587,12 @@ void populate_dependencies(struct dependency_list *list)
             struct dependency_node *iter = node->next;
             while(iter != NULL)
             {
-                if(iter->dependencies[node->nid] == 0)
+                long int j;
+                for(j=0; iter->input[j] != NULL; j++)
                 {
-                    long int j;
-                    for(j=0; iter->input[j] != NULL; j++)
+                    if(strcmp(node->output[i], iter->input[j]) == 0)
                     {
-                        if(strcmp(node->output[i], iter->input[j]) == 0)
-                        {
-                            iter->dependencies[node->nid] = 1;
-                        }
+                        add_dependency(iter, node);
                     }
                 }
                 iter = iter->next;
@@ -659,15 +605,12 @@ void populate_dependencies(struct dependency_list *list)
             struct dependency_node *iter = node->next;
             while(iter != NULL)
             {
-                if(iter->dependencies[node->nid] == 0)
+                long int j;
+                for(j=0; iter->output[j] != NULL; j++)
                 {
-                    long int j;
-                    for(j=0; iter->output[j] != NULL; j++)
+                    if(strcmp(node->output[i], iter->output[j]) == 0)
                     {
-                        if(strcmp(node->output[i], iter->output[j]) == 0)
-                        {
-                            iter->dependencies[node->nid] = 1;
-                        }
+                        add_dependency(iter, node);
                     }
                 }
                 iter = iter->next;
@@ -680,15 +623,12 @@ void populate_dependencies(struct dependency_list *list)
             struct dependency_node *iter = node->next;
             while(iter != NULL)
             {
-                if(iter->dependencies[node->nid] == 0)
+                long int j;
+                for(j=0; iter->output[j] != NULL; j++)
                 {
-                    long int j;
-                    for(j=0; iter->output[j] != NULL; j++)
+                    if(strcmp(node->input[i], iter->output[j]) == 0)
                     {
-                        if(strcmp(node->input[i], iter->output[j]) == 0)
-                        {
-                            iter->dependencies[node->nid] = 1;
-                        }
+                        add_dependency(iter, node);
                     }
                 }
                 iter = iter->next;
@@ -696,12 +636,6 @@ void populate_dependencies(struct dependency_list *list)
         }     
         node = node->next;
     }
-}
-
-//  Returns true if the dependency_list is empty.
-bool dependency_list_empty(struct dependency_list *list)
-{
-    return list->head == NULL;
 }
 
 void complete_sequence_tree(command_t c)
@@ -731,15 +665,6 @@ void complete_sequence_tree(command_t c)
     }
 }
 
-bool has_dependencies(struct dependency_node *node)
-{
-    int i;
-    for(i=0; i < node->nid; i++)
-        if(node->dependencies[i] == 1)
-            return true;
-    
-    return false;
-}
 
 // Use this to print the list!
 void debug_list(struct dependency_list *list)
@@ -748,7 +673,7 @@ void debug_list(struct dependency_list *list)
     while(node != NULL)
     {
         long int i;
-        printf("nid:     %d\n",node->nid);
+        //printf("nid:     %d\n",node->nid);
         printf("input:   ");
         for(i=0; node->input[i] != NULL; i++)
             printf("%s ", node->input[i]);
@@ -756,12 +681,28 @@ void debug_list(struct dependency_list *list)
         for(i=0; node->output[i] != NULL; i++)
             printf("%s ", node->output[i]);
         printf("\ndep:     ");
-        for(i=0; node->dependencies[i] != -1; i++)
-            printf("%d ", node->dependencies[i]);
-        printf("\n\n");
+        //for(i=0; node->dependencies[i] != -1; i++)
+        //    printf("%d ", node->dependencies[i]);
+        //printf("\n\n");
         node = node->next;
     }
 }
+
+//Destructor to clean up all and deallocate all the nodes
+void 
+clean_up_nodes(struct dependency_list *l)
+{
+    struct dependency_node *cur = l->head;
+    struct dependency_node *next = NULL;
+    while (cur != NULL)
+    {
+        next = cur->next;
+        free(cur);
+        cur = next;
+    }
+    l->head = NULL;
+}
+
 
 void
 execute_command (command_t c, bool time_travel)
@@ -781,52 +722,52 @@ execute_command (command_t c, bool time_travel)
     //  Let's start with populating an array in post-order from 'c' such that we
     //      can get a dependency list going.
     struct dependency_list *list = get_dependency_list(c);
-    debug_list(list);
-
-    while (!dependency_list_empty(list))
-    {
-        struct dependency_node *iter = list->head;
-        while(iter != NULL)
-        {
-            int status;
-            if(iter->status == 1)
-                if(waitpid(iter->pid, &status, WNOHANG) == iter->pid)
-                {
-                    printf("(W) The dragon [%d] has been slain! Clearing up the dependencies ...\n", iter->nid);
-                    int exit_status = WEXITSTATUS(status);
-                    iter->command->status = exit_status;
-                    iter = remove_dependency_node(list, iter->nid);
-                }
-            
-            if(iter != NULL)
-                iter = iter->next;
-        }
-
-        for(iter = list->head; iter != NULL; iter = iter->next)
-        {
-            if(iter->status == 1)
-                continue;
-            
-            if(has_dependencies(iter))
-                continue;
-            
-            printf("(F) The hero   [%d] is born!\n", iter->nid);
-            
-            pid_t pid = fork();
-            if (pid == 0) {
-                execute_switch(iter->command);
-                _exit(iter->command->status);
-            }
-            if (pid > 0)
-            {
-                iter->pid = pid;
-                iter->status = 1;
-            }
-        }
-    }
-    
-    complete_sequence_tree(c);
-
     //debug_list(list);
+
+    // Supposely the code to execute command in parallel
+    
+    struct dependency_node *node = list->head;
+
+    int status;
+    //Run process with satisfied dependencies
+    while (node != NULL)
+    {   
+        //Wait for dependencies to complete
+        int i; 
+        
+        int dependencySize = node->list_size;
+        //wait for all dependencies to finish
+        loop_label: 
+            for (i = 0;i < dependencySize; i++)
+            {                
+                if (node->before_list[i]->pid == -1) 
+                    goto loop_label;
+            }
+
+        //Reaps of the dependencet processes that have become zombie
+        for (i = 0;i < dependencySize; i++)
+        {                
+            pid_t checkpid = node->before_list[i]->pid;
+                waitpid(checkpid, &status, 0);
+        }
+        
+
+        pid_t pid = fork();
+        if (pid == 0) {
+            execute_switch(node->command);
+            _exit(node->command->status);
+        }
+        if (pid > 0)
+        {
+            node->pid = pid;
+        }
+
+        node = node->next;
+    }
+    while(wait(&status)>0)
+      continue;
+
+    complete_sequence_tree(c);
+    clean_up_nodes(list);
 
 }

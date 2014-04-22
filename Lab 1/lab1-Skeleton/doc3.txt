@@ -1,0 +1,8 @@
+Bash conditional statements perform different computations or actions depending on whether a programmer-specified boolean condition evaluates to true or false. These statements are used to execute different parts of your shell program depending on whether certain conditions are true. The ability to branch makes shell scripts powerful.
+
+In Bash, we have the following conditional statements:
+
+if..then..fi statement (Simple If)
+if..then..else..fi statement (If-Else)
+if..elif..else..fi statement (Else If ladder)
+if..then..else..if..then..fi..fi..(Nested if)
