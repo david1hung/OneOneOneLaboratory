@@ -701,6 +701,7 @@ clean_up_nodes(struct dependency_list *l)
         cur = next;
     }
     l->head = NULL;
+    l->size = 0;
 }
 
 
