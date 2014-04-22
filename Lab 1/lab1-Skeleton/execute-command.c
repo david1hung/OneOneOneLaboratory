@@ -427,6 +427,7 @@ struct dependency_node *remove_dependency_node(struct dependency_list *l, int ni
         {
             if(traversal->nid == nid)
             {   
+                
                 struct dependency_node *tmp;
                 if(prev == NULL) // If it's the first node!
                 {
@@ -489,6 +490,8 @@ void populate_input_output(struct dependency_node *n, command_t c)
         long int i;
         for(i=1; c->u.word[i] != NULL; i++)
         {
+            //Remark, we could add a check for '-' at the start of the word which would be the options added.
+            //But for echo -n, it prints -n anyways... 
             n->input[n->ninput] = c->u.word[i];
             (n->ninput)++;
         }
@@ -599,9 +602,10 @@ struct dependency_list *get_dependency_list(command_t root)
 //          for each output
 //              for each subsequent node's inputs
 //                  if(output == input)
-//                      add the node to the dependency list                   
+//                      add the node to the dependency list                
 //  Which is the main reason for its seemingly daunting for loops. Otherwise, it
 //      is a fairly unexceptional function involving two layers of iterators.
+//  Similarily code exist for (Read then Write and Write then write)   
 void populate_dependencies(struct dependency_list *list)
 {
     struct dependency_node *node = list->head;
@@ -621,6 +625,8 @@ void populate_dependencies(struct dependency_list *list)
     while(node != NULL)
     {
         long int i;
+
+        //check Write And Read
         for(i=0; node->output[i] != NULL; i++)
         {
             struct dependency_node *iter = node->next;
@@ -640,6 +646,48 @@ void populate_dependencies(struct dependency_list *list)
                 iter = iter->next;
             }
         }
+        
+        //Check Write and Write
+        for(i=0; node->output[i] != NULL; i++)
+        {
+            struct dependency_node *iter = node->next;
+            while(iter != NULL)
+            {
+                if(iter->dependencies[node->nid] == 0)
+                {
+                    long int j;
+                    for(j=0; iter->output[j] != NULL; j++)
+                    {
+                        if(strcmp(node->output[i], iter->output[j]) == 0)
+                        {
+                            iter->dependencies[node->nid] = 1;
+                        }
+                    }
+                }
+                iter = iter->next;
+            }
+        }  
+
+        //Check Read and Write 
+        for(i=0; node->input[i] != NULL; i++)
+        {
+            struct dependency_node *iter = node->next;
+            while(iter != NULL)
+            {
+                if(iter->dependencies[node->nid] == 0)
+                {
+                    long int j;
+                    for(j=0; iter->output[j] != NULL; j++)
+                    {
+                        if(strcmp(node->input[i], iter->output[j]) == 0)
+                        {
+                            iter->dependencies[node->nid] = 1;
+                        }
+                    }
+                }
+                iter = iter->next;
+            }
+        }     
         node = node->next;
     }
 }
@@ -666,6 +714,29 @@ void debug_list(struct dependency_list *list)
     }
 }
 
+//  update_node_dependency sets the dependency in all the nodes that 
+//      require it from 1 to 0. Allowing the node to run at the next
+//      iteration. 
+void update_node_dependency(struct dependency_list *l, int nid)
+{
+    if(l->head == NULL) // In the case that the list is empty.
+        return;
+    else if (nid >= l->size) //if invalid nid input
+        return;
+    else //otherwise
+    {
+        struct dependency_node *iter = l->head;
+        while(iter != NULL)
+        {
+            if(iter->dependencies[nid] == 1)
+                iter->dependencies[nid] = 0;
+            iter = iter->next;
+        }
+    }
+}
+
+
+
 void
 execute_command (command_t c, bool time_travel)
 {
@@ -684,13 +755,48 @@ execute_command (command_t c, bool time_travel)
     //  Let's start with populating an array in post-order from 'c' such that we
     //      can get a dependency list going.
     struct dependency_list *list = get_dependency_list(c);
-    debug_list(list);
+    //debug_list(list);
     
+    /*
     struct dependency_node *node = remove_dependency_node(list, 0);
     if(node != NULL)
         printf("-- %d --\n", node->nid);
     else
         printf("-- EOL --\n");
+    */
+
+    // Supposely the code to execute command in parallel
     
-    debug_list(list);
+    struct dependency_node *node = list->head;
+
+    //Run process with satisfied dependencies
+    while (node != NULL)
+    {   
+        //Wait for dependencies to complete
+        int i; 
+        int nid = node->nid;
+        loop_label:
+            for (i = 0; i < nid; i++)
+            {
+                // if any depedencies not completed, loop. 
+                if (node->dependencies[i] == 1) 
+                    goto loop_label;
+            }
+
+        int status;
+
+        pid_t pid = fork();
+        if (pid == 0) {
+            execute_switch(node->command);
+            _exit(node->command->status);
+        }
+        if (pid > 0) {
+            waitpid(pid, &status, 0); 
+            update_node_dependency(list, nid);
+        }
+        node = node->next;
+    }
+
+    //debug_list(list);
+
 }
