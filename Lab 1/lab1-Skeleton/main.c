@@ -67,5 +67,5 @@ main (int argc, char **argv)
 	}
     }
 
-  return print_tree || !last_command ? 0 : command_status (last_command);
+    return print_tree || !last_command ? 0 : command_status (last_command);
 }

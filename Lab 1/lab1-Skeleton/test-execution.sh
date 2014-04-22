@@ -1,8 +1,10 @@
 #!/bin/bash
 tmp=$0-$$.tmp
 mkdir "$tmp" || exit
-cp test.sh "$tmp"
+cp test-execution.sh "$tmp"
 cd "$tmp" || exit
+
+printf "woohoo! you made it to the test file\n" > tmp_test
 
 n=1
 for case in \
@@ -23,10 +25,13 @@ for case in \
   '(true)' \
   '(false)' \
   'cat < invalid_file' \
-  'cat < test.sh' \
-  'cat < test.sh > hello.txt'
+  'cat < tmp_test' \
+  'cat < tmp_test > hello.txt'
 do
   echo "$case" >case$n.sh || exit
-  echo "#$n" ; cat case$n.sh ; ../timetrash case$n.sh ; printf "$?" >> case$n.sh
+  echo "#$n" ; cat case$n.sh ; ../timetrash case$n.sh ; printf "Result: $?\n\n"
   n=$((n+1))
 done
+
+cd ..
+rm -fr "$tmp"

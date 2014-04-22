@@ -336,138 +336,35 @@ command_status (command_t c)
   return c->status;
 }
 
-/* NOTE: Lab 1C implementation begins here. */
-
-//  Dependency node for the dependency list. I don't think we need to touch any
-//      of it directly, you can interface with dependency-removal using the
-//      remove_dependency_node function.
 struct dependency_node {
-    int nid;
+    
     command_t command;
-
     char *input[NODE_MAX];
     int ninput;
     char *output[NODE_MAX];
     int noutput;
-
-    int *dependencies;
+    
+    //  In practice, we would be wasting the status
+    //     member variable if we were to have an
+    //     array of pids. Also, it gives us the
+    //     flexibility to pop nodes once they're
+    //     complete.
+    command_t dependencies[NODE_MAX];
+    int ndependencies;
     
     struct dependency_node *next;
 };
 
-//  Dependency list. Singly linked list. After creating one, initialize the two
-//      member variables using init_dependency_list. To add a node, call
-//      add_dependency_node, and to remove a node (and traces of its 
-//      dependencies), call remove_dependency_node with the relevant nid.
 struct dependency_list {
     struct dependency_node *head;
     long int size;
 };
 
-//  Initializes the dependency list.
-void init_dependency_list(struct dependency_list *l)
-{
+void init_dependency_list(struct dependency_list *l) {
     l->head = NULL;
     l->size = 0;
 }
 
-//  Function declaration: refer below for better description.
-void populate_input_output(struct dependency_node *n, command_t c);
-
-//  add_dependency_node uses barebones enumeration to give each node an nid:
-//      the nid is exactly the list's size. We assume that once any form of
-//      node removal occurs, there will no longer be any add_dependency_node
-//      function calls.
-void add_dependency_node(struct dependency_list *l, command_t c)
-{
-    // Here, we start by generating and initializing the dependency node.
-    struct dependency_node *node =
-            (struct dependency_node *)malloc(sizeof(struct dependency_node));
-
-    node->nid = l->size;
-    node->command = c;
-    node->ninput = 0;
-    node->noutput = 0;
-    node->next = NULL;
-    
-    populate_input_output(node, c);
-    
-    // Here, we cap each of the input and output lists.
-    node->input[node->ninput] = NULL;
-    node->output[node->noutput] = NULL;
-    
-    // Then we perform the relevant node-addition actions.
-    if(l->head == NULL) // In the case that the list is empty.
-        l->head = node;
-    else // Otherwise ...
-    {
-        struct dependency_node *traversal = l->head;
-        while(traversal->next != NULL)
-            traversal = traversal->next;
-        traversal->next = node;
-    }
-    
-    (l->size)++;
-    return;
-}
-
-//  remove_dependency_node is a two part process. It begins by deleting a node
-//      according to nid, and subsequently removes itself from the dependency
-//      lists of all subsequent nodes. Checking succeeding nodes is sufficient
-//      on the basis that you cannot depend on something you precede.
-struct dependency_node *remove_dependency_node(struct dependency_list *l, int nid)
-{
-    if(l->head == NULL) // In the case that the list is empty.
-        return NULL;
-    else // Otherwise ...
-    {
-        struct dependency_node *prev = NULL;
-        struct dependency_node *traversal = l->head;
-        while(traversal != NULL)
-        {
-            if(traversal->nid == nid)
-            {   
-                struct dependency_node *tmp;
-                if(prev == NULL) // If it's the first node!
-                {
-                    l->head = traversal->next;
-                    tmp = traversal->next;
-                    free(traversal);
-                }
-                else
-                {
-                    prev->next = traversal->next;
-                    tmp = traversal->next;
-                    free(traversal);
-                }
-                
-                struct dependency_node *iter = tmp;
-                while(iter != NULL)
-                {
-                    if(iter->dependencies[nid] == 1)
-                        iter->dependencies[nid] = 0;
-                    iter = iter->next;
-                }
-                
-                (l->size)--;
-                return tmp;
-            }
-            
-            prev = traversal;
-            traversal = traversal->next;
-        }
-        
-        return prev->next;
-    }
-    return NULL;
-}
-
-//  populate_input_output is a helper function for add_dependency_node. The
-//      reason why we place it in a separate function is because it is called
-//      recursively: it traverses, in post-order, through the command passed
-//      to it and populates the input and output arrays. As noted earlier, these
-//      two arrays are "capped" with a NULL pointer in the add_dependency_node
-//      function.
 void populate_input_output(struct dependency_node *n, command_t c)
 {
     if(c == NULL)
@@ -505,49 +402,82 @@ void populate_input_output(struct dependency_node *n, command_t c)
     }
 }
 
-//  Function declaration: refer below for better description.
-bool probe_sequence_command(command_t c);
+void add_dependency_node(struct dependency_list *l, command_t c) {
+    // Here, we start by generating and initializing the dependency node.
+    struct dependency_node *node =
+            (struct dependency_node *)malloc(sizeof(struct dependency_node));
+    node->command = c;
+    node->ninput = 0;
+    node->noutput = 0;
+    node->ndependencies = 0;
+    node->next = NULL;
+    
+    populate_input_output(node, c);
+    node->input[node->ninput] = NULL;
+    node->output[node->noutput] = NULL;
+    
+    // Then we perform the relevant node-addition actions.
+    if(l->head == NULL) // In the case that the list is empty.
+        l->head = node;
+    else // Otherwise ...
+    {
+        struct dependency_node *traversal = l->head;
+        while(traversal->next != NULL)
+            traversal = traversal->next;
+        traversal->next = node;
+    }
+    
+    (l->size)++;
+    return;
+}
 
-//  populate_dependency_list, although ambiguously named, serves the important
-//      purpose of populating the dependency_list struct, not the array of
-//      dependencies within the dependency_node. It uses probe_sequence_command
-//      as a helper function (purpose elaborated later) to divide the root
-//      tree into the simplest subtrees divided by SEQUENCE_COMMAND nodes.
-//      It works recursively by once again iterating over the tree in post-order
-//      and adding to the dependency_list subtrees that don't contain
-//      SEQUENCE_COMMANDs. Just as a quick example, suppose we have the command
-//          echo a && echo b ; echo c ; echo d
-//      The output looks approximately like:
-//                echo a \
-//              &&
-//                echo b \
-//            ;
-//              echo c \
-//            ;
-//              echo d
-//  In this case, we are interested in breaking apart the tree such that we 
-//      divide at each of the SEQUENCE_COMMANDs, at the semicolons. 
+/*
+bool remove_dependency_node(struct dependency_list *l, command_t c) {
+    if(l->head == NULL) // In the case that the list is empty.
+        return false;
+    else // Otherwise ...
+    {
+        struct dependency_node *traversal = l->head;
+        while(traversal->next != NULL)
+        {
+            if(traversal->next->command == c)
+                break;
+            traversal = traversal->next;
+        }
+    }
+    
+    return node;
+}
+*/
+
+// Probes the command tree starting from c for any sequence commands. If none
+//     are encountered, the function returns false.
+bool probe_sequence_command(command_t c)
+{
+    if(c == NULL || c->type == SIMPLE_COMMAND || c->type == SUBSHELL_COMMAND)
+        return false;
+    else if(c->type == SEQUENCE_COMMAND)
+        return true;
+    
+    return probe_sequence_command(c->u.command[0]) ||
+         probe_sequence_command(c->u.command[1]);
+}
+
 void populate_dependency_list(struct dependency_list *l, command_t c)
 {
     if(c == NULL)
         return;
     else
     {
-        //  Note: probe_sequence_command abstractly serves to return a boolean
-        //      value depending on whether there is a SEQUENCE_COMMAND in the
-        //      current or descendent nodes.
-        if(!probe_sequence_command(c)) // If there aren't any for this node
-        {                              //     then this node is some form of
-            add_dependency_node(l, c); //     operand.
+        if(!probe_sequence_command(c))
+        {
+            add_dependency_node(l, c);
             return;
         }
         
-        // We probe left then right subtrees.
         bool left_sequence = probe_sequence_command(c->u.command[0]);
         bool right_sequence = probe_sequence_command(c->u.command[1]);
         
-        //  We recursively call the function or add the subtree to the list in
-        //      post-order sequence.
         if(left_sequence)
             populate_dependency_list(l, c->u.command[0]);
         else
@@ -560,64 +490,18 @@ void populate_dependency_list(struct dependency_list *l, command_t c)
     }
 }
 
-//  probe_sequence_command basically runs from the current command through to
-//      the terminating cases: SIMPLE_COMMAND, SUBSHELL_COMMAND, or supposedly
-//      NULL (which should never occur) and checks for any SEQUENCE_COMMANDS.
-bool probe_sequence_command(command_t c)
-{
-    if(c == NULL || c->type == SIMPLE_COMMAND || c->type == SUBSHELL_COMMAND)
-        return false;
-    else if(c->type == SEQUENCE_COMMAND)
-        return true;
-    
-    //  At this point, we have a non-SIMPLE_COMMAND/SUBSHELL_COMMAND so it's o-k
-    //      to probe both subtrees.
-    return probe_sequence_command(c->u.command[0]) ||
-         probe_sequence_command(c->u.command[1]);
-}
-
-//  Function declaration: refer below for better description.
-void populate_dependencies(struct dependency_list *list);
-
-//  get_dependency_list basically creates the list (using all of the above 
-//      functions) and returns it.
 struct dependency_list *get_dependency_list(command_t root)
 {
     struct dependency_list *list =
         (struct dependency_list*)malloc(sizeof(struct dependency_list));
     
-    init_dependency_list(list);
     populate_dependency_list(list, root);
-    populate_dependencies(list);
-    
     return list;
 }
 
-//  populate_dependencies populates the dependencies by following a pseudocode
-//      of the form:
-//      for each node
-//          for each output
-//              for each subsequent node's inputs
-//                  if(output == input)
-//                      add the node to the dependency list                   
-//  Which is the main reason for its seemingly daunting for loops. Otherwise, it
-//      is a fairly unexceptional function involving two layers of iterators.
 void populate_dependencies(struct dependency_list *list)
 {
     struct dependency_node *node = list->head;
-    while(node != NULL)
-    {
-        //  We need this array to be list->size + 1 so that we can fit the
-        //      capping -1 for later iterating.
-        node->dependencies = (int *)malloc(sizeof(int)*(list->size + 1));
-        long int i;
-        for(i=0; i<list->size; i++)
-            node->dependencies[i] = 0;
-        node->dependencies[i] = -1;
-        node = node->next;
-    }
-    
-    node = list->head;
     while(node != NULL)
     {
         long int i;
@@ -626,42 +510,20 @@ void populate_dependencies(struct dependency_list *list)
             struct dependency_node *iter = node->next;
             while(iter != NULL)
             {
-                if(iter->dependencies[node->nid] == 0)
+                long int j;
+                for(j=0; iter->input[j] != NULL; j++)
                 {
-                    long int j;
-                    for(j=0; iter->input[j] != NULL; j++)
+                    printf("(%s, %s)\n",node->output[i],iter->input[j]);
+                    if(strcmp(node->output[i], iter->input[j]) == 0)
                     {
-                        if(strcmp(node->output[i], iter->input[j]) == 0)
-                        {
-                            iter->dependencies[node->nid] = 1;
-                        }
+                        iter->dependencies[iter->ndependencies] = node->command;
+                        (iter->ndependencies)++;
                     }
                 }
                 iter = iter->next;
             }
         }
-        node = node->next;
-    }
-}
-
-// Use this to print the list!
-void debug_list(struct dependency_list *list)
-{
-    struct dependency_node *node = list->head;
-    while(node != NULL)
-    {
-        long int i;
-        printf("nid:     %d\n",node->nid);
-        printf("input:   ");
-        for(i=0; node->input[i] != NULL; i++)
-            printf("%s ", node->input[i]);
-        printf("\noutput:  ");
-        for(i=0; node->output[i] != NULL; i++)
-            printf("%s ", node->output[i]);
-        printf("\ndep:     ");
-        for(i=0; node->dependencies[i] != -1; i++)
-            printf("%d ", node->dependencies[i]);
-        printf("\n\n");
+        node->dependencies[node->ndependencies] = NULL;
         node = node->next;
     }
 }
@@ -684,13 +546,24 @@ execute_command (command_t c, bool time_travel)
     //  Let's start with populating an array in post-order from 'c' such that we
     //      can get a dependency list going.
     struct dependency_list *list = get_dependency_list(c);
-    debug_list(list);
+    populate_dependencies(list);
     
-    struct dependency_node *node = remove_dependency_node(list, 0);
-    if(node != NULL)
-        printf("-- %d --\n", node->nid);
-    else
-        printf("-- EOL --\n");
+    struct dependency_node *node = list->head;
+    while(node != NULL)
+    {
+        long int i;
+        printf("input: ");
+        for(i=0; node->input[i] != NULL; i++)
+            printf("%s / ", node->input[i]);
+        printf("\noutput: ");
+        for(i=0; node->output[i] != NULL; i++)
+            printf("%s / ", node->output[i]);
+        printf("\ndependencies: ");
+        for(i=0; node->dependencies[i] != NULL; i++)
+            printf("%x / ", node->dependencies[i]);
+        printf("\n\n");
+        node = node->next;
+    }
     
-    debug_list(list);
+    
 }

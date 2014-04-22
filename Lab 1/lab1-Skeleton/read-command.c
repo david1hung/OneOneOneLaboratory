@@ -569,7 +569,7 @@ char ***split_command_lines(char **tokens, long int ntokens, long int *nlines)
 				exit(1);
 			}
 		}
-        else if(s > 0 && s != CLOSE_SUBSHELL_STATE) // Last iterated state
+        else if(s > 0 && s != CLOSE_SUBSHELL_STATE && s != SEQUENCE_STATE) // Last iterated state
         {
 			fprintf(stderr, "%lu: Missing command or input/output file\n",
                 line_number);
@@ -909,6 +909,8 @@ command_t generate_command_tree(char **line, long int *line_number)
 
     free(op);
     free(cmd);
+    
+    tmp->status = -1;
 
     return tmp;
 }

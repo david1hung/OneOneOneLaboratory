@@ -1,3 +1,26 @@
+CS111 LAB 1B README
+Victor Kwan: 004151151
+David Hung: 604191130
+
+Our implementation of Lab 1B was definitely more straight forward than that for 1A. We use a switch statement to navigate around the different cases of commands, where the overall structure is modeled after a post-order traversal of the tree. Statuses are initially set to -1 when we reach the switch, and we update according to the WEXITSTATUS(status) macro afterwards. Two things that stood out to us during our implementation were:
+
+1.  The simplicity of implementing AND, OR, and SEQUENCE commands. The three 
+        very much just differ in whether or not to execute the second command 
+        depending on the exit status of the first command. 
+2.  The complexity of the PIPE command. In particular, it was interesting 
+        considering the different pipes that we would delicately have to close 
+        in order to make sure that we don't have any file descriptor leaks.
+        
+That aside, our SIMPLE_COMMAND execution and SUBSHELL_COMMAND execution are 
+    fairly unexceptional. The former is implemented by using dup2(...) for the 
+    relevant I/O redirections and execvp in the child process to run the 
+    command. The latter is simply to run the subshell command in a separate 
+    fork and apply the exit status elsewhere.
+    
+Our provided test.sh (run directly as ./test.sh) allowed us to see whether or 
+    not our operands executed in the correct sequence.
+
+-----
 CS111 LAB 1A README
 Victor Kwan: 004151151
 David Hung: 604191130
