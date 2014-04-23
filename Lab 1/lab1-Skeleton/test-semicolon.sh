@@ -7,5 +7,6 @@ for case in \
 do
     echo "$case" > semicolon_sample
     ./timetrash -p semicolon_sample
+    ./timetrash -t semicolon_sample
     rm semicolon_sample
 done

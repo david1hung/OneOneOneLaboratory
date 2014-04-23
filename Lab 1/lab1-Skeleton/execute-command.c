@@ -496,9 +496,12 @@ void populate_input_output(struct dependency_node *n, command_t c)
         for(i=1; c->u.word[i] != NULL; i++)
         {
             //Remark, we could add a check for '-' at the start of the word which would be the options added.
-            //But for echo -n, it prints -n anyways... 
-            n->input[n->ninput] = c->u.word[i];
-            (n->ninput)++;
+            //But for echo -n, it prints -n anyways...
+            if(c->u.word[i][0] != '-')
+            {
+                n->input[n->ninput] = c->u.word[i];
+                (n->ninput)++;
+            }
         }
 
     }
@@ -790,7 +793,7 @@ execute_command (command_t c, bool time_travel)
         {
             int status;
             if(iter->status == 1)
-                if(waitpid(iter->pid, &status, 0) == iter->pid)
+                if(waitpid(iter->pid, &status, WNOHANG) == iter->pid)
                 {
                     printf("(W) The dragon [%d] has been slain! Clearing up the dependencies ...\n", iter->nid);
                     int exit_status = WEXITSTATUS(status);
