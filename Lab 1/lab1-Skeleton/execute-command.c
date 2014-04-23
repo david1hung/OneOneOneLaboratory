@@ -790,7 +790,7 @@ execute_command (command_t c, bool time_travel)
         {
             int status;
             if(iter->status == 1)
-                if(waitpid(iter->pid, &status, WNOHANG) == iter->pid)
+                if(waitpid(iter->pid, &status, 0) == iter->pid)
                 {
                     printf("(W) The dragon [%d] has been slain! Clearing up the dependencies ...\n", iter->nid);
                     int exit_status = WEXITSTATUS(status);
