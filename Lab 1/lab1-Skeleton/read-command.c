@@ -959,10 +959,57 @@ make_command_stream (int (*get_next_byte) (void *),
     {
         enqueue(cstream, generate_command_tree(lines[j], &line_number));
     }
-
+    
     free(lines);
 
     return cstream;
+}
+
+void parallelize_command_stream(command_stream_t cstream)
+{
+    /*
+    while cstream is not empty
+        dequeue the first command
+        push the command into the command stack
+        push a sequence into the operand stack
+        
+    pop a sequence into nothingness
+    
+    generate big tree by popping and merging
+    */
+    
+    struct stack op;
+    init_stack(&op);
+    
+    struct stack cmd;
+    init_stack(&cmd);
+    
+    command_t command;
+    while (command = dequeue(cstream))
+    {
+        push(&cmd, command);
+        
+        command_t sequence = (command_t)malloc(sizeof(struct command));
+        sequence->type = SEQUENCE_COMMAND;
+        sequence->input = NULL;
+        sequence->output = NULL;
+        push(&op, sequence);
+    }
+    
+    pop(&op);
+    
+    while(top(&op) != NULL)
+    {
+        command_t tmp = pop(&op);
+        command_t cmd_b = pop(&cmd);
+        command_t cmd_a = pop(&cmd);
+        
+        tmp->u.command[0] = cmd_a;
+        tmp->u.command[1] = cmd_b;
+        push(&cmd, tmp);
+    }
+    
+    enqueue(cstream, pop(&cmd));
 }
 
 command_t

@@ -784,7 +784,7 @@ execute_command (command_t c, bool time_travel)
     //  Let's start with populating an array in post-order from 'c' such that we
     //      can get a dependency list going.
     struct dependency_list *list = get_dependency_list(c);
-    debug_list(list);
+    // debug_list(list);
 
     while (!dependency_list_empty(list))
     {
@@ -795,7 +795,7 @@ execute_command (command_t c, bool time_travel)
             if(iter->status == 1)
                 if(waitpid(iter->pid, &status, WNOHANG) == iter->pid)
                 {
-                    printf("(W) The dragon [%d] has been slain! Clearing up the dependencies ...\n", iter->nid);
+                    // printf("(W) The dragon [%d] has been slain! Clearing up the dependencies ...\n", iter->nid);
                     int exit_status = WEXITSTATUS(status);
                     iter->command->status = exit_status;
                     iter = remove_dependency_node(list, iter->nid);
@@ -813,7 +813,7 @@ execute_command (command_t c, bool time_travel)
             if(has_dependencies(iter))
                 continue;
             
-            printf("(F) The hero   [%d] is born!\n", iter->nid);
+            // printf("(F) The hero   [%d] is born!\n", iter->nid);
             
             pid_t pid = fork();
             if (pid == 0) {
