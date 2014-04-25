@@ -1,8 +1,79 @@
+CS111 LAB 1C README
+Victor Kwan: 004151151
+David Hung: 604191130
+
+Finishing off the lab, we implemented parallelism in 1C. Initially, we thought 
+    that we were working around parallelizing specific command trees (because 
+    of how the spec was laid out and how the execute_command was written and 
+    called) and worked around this constraint. Afterwards, we realized that we 
+    were meant to parallelize across the entire *.sh file, so we adapted our 
+    main.c to suit this purpose. The key observation we made towards our 
+    parallelization of the command trees, and eventually, the *.sh files was 
+    that the SEQUENCE_COMMAND will always occupy the top-levels of a command 
+    tree. We derive this from the notion that on the operator stack, we follow 
+    the paradigm:
+
+    "A new operator is pushed to the stack if it has higher precedence than the 
+        top operator. If new operator has lower or equal precedence than the 
+        top operator, you have to iteratively pop the top operator out and 
+        combine it with the top two commands." -- Jinha Kang
+    
+Which subsequently means that, with SEQUENCE_COMMAND having the least 
+    precedence, we'll only pop SEQUENCE_COMMANDs with other SEQUENCE_COMMANDs. 
+    We can therefore split each SEQUENCE_COMMAND into its left and right 
+    branches to become parallelizable subtrees.
+
+Our flow of execution for a parallel process differs from 1B as follows:
+    1.  If the -t flag is called, we start by recombining each of the command 
+            trees into one large tree connected with SEQUENCE_COMMANDs.
+    2.  We use probe_sequence_command and populate_dependency_list to 
+            recursively find SEQUENCE_COMMANDs without lower level ones. We
+            populate a linked list of dependency-nodes this way.
+    3.  For each of these dependency-nodes, we recursively use a post-order
+            traversal of the subtree to populate inputs and outputs.
+    4.  We subsequently iteratively populate the dependency array. To simplify
+            "repeated dependencies" and to remove the need to delete from
+            dependency lists, we maintain a boolean array of whether the node
+            waits on another dependency at dependencies[i].
+    5.  We cycle through the dependency_list with the following pseudocode:
+    
+        while the dependency list is not empty
+            for each dependency node
+                if the command is running
+                    wait with WNOHANG
+                    if the process has become a zombie
+                        remove the process from other dependency arrays
+                        remove the dependency node
+            
+            for each dependency node
+                if the commmand is not running
+                    fork()
+                    if child process
+                        execute the command
+                    if parent process
+                        set the dependency-node status to running
+                        record the child pid
+        
+        manage the exit status on each of the SEQUENCE_COMMANDs
+        
+I felt that our execution of 1C was successful and, in fact, a more interesting
+    interpretation of the problem. We parallelize in a deeper level and,
+    furthermore, don't ever "wait" idly. The parent process loops until 
+    completion. Although this does result in a greater system overhead, it also
+    ensures that we achieve "real" parallelism rather than being bottlenecked
+    by another process' wait.
+
+-----
 CS111 LAB 1B README
 Victor Kwan: 004151151
 David Hung: 604191130
 
-Our implementation of Lab 1B was definitely more straight forward than that for 1A. We use a switch statement to navigate around the different cases of commands, where the overall structure is modeled after a post-order traversal of the tree. Statuses are initially set to -1 when we reach the switch, and we update according to the WEXITSTATUS(status) macro afterwards. Two things that stood out to us during our implementation were:
+Our implementation of Lab 1B was definitely more straight forward than that for 
+    1A. We use a switch statement to navigate around the different cases of 
+    commands, where the overall structure is modeled after a post-order 
+    traversal of the tree. Statuses are initially set to -1 when we reach the 
+    switch, and we update according to the WEXITSTATUS(status) macro 
+    afterwards. Two things that stood out to us during our implementation were:
 
 1.  The simplicity of implementing AND, OR, and SEQUENCE commands. The three 
         very much just differ in whether or not to execute the second command 

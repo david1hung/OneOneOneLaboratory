@@ -160,6 +160,7 @@ void parse_stack(struct stack *s)
         }
         else
         {
+            // print_command(n->command);
             printf("    Type: %u.\n",n->command->type);
         }
         count++;
@@ -627,6 +628,7 @@ command_t generate_command_tree(char **line, long int *line_number)
 	
 	long int open_p[128];
 	long int nopen_p = 0;
+    
 
     long int i;
     for(i = 0; line[i] != NULL; i++)
@@ -756,7 +758,7 @@ command_t generate_command_tree(char **line, long int *line_number)
             } break;
             case NEWLINE_STATE:
             {
-                if(!processing_simple_command || line[i+1] == NULL)
+                if(s_prev != CLOSE_SUBSHELL_STATE && !processing_simple_command || line[i+1] == NULL)
                 {
                     free(line[i]);
                     continue;
@@ -772,7 +774,7 @@ command_t generate_command_tree(char **line, long int *line_number)
 						c = pop(op);
 						free(c);
 					}
-					else
+					else if(s_prev != CLOSE_SUBSHELL_STATE)
 					{
 					    fprintf(stderr, "%lu: Missing command before operand\n",
                         *line_number);
@@ -876,7 +878,7 @@ command_t generate_command_tree(char **line, long int *line_number)
 
     // parse_stack(cmd);
     // parse_stack(op);
-
+    
     while(top(op) != NULL && top(op)->type != SUBSHELL_COMMAND)
     {
         command_t tmp = pop(op);
