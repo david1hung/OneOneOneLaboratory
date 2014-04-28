@@ -1,5 +1,4 @@
-(echo a && echo b ; echo c
-
+(echo a > hello.txt && echo b ; echo c
 ) && echo word
 echo d
 echo e
@@ -9,3 +8,5 @@ echo g
 
 
 echo h || echo i && echo j ; echo l ; echo f ; false
+
+rm hello.txt

@@ -19,35 +19,41 @@
 #define NODE_MAX 100
 
 void executingSimple(command_t c);
-void executingSubshell(command_t c);
-void executingAnd(command_t c);
-void executingOr(command_t c);
-void executingSequence(command_t c);
-void executingPipe(command_t c);
+void executingSubshell(command_t c, bool verbose);
+void executingAnd(command_t c, bool verbose);
+void executingOr(command_t c, bool verbose);
+void executingSequence(command_t c, bool verbose);
+void executingPipe(command_t c, bool verbose);
 
-void execute_switch(command_t c)
+void execute_switch(command_t c, bool verbose)
 {
     c->status = -1;
     
 	switch(c->type)
 	{
 	case SIMPLE_COMMAND:
+    if(verbose)
+    {
+        printf("+ ");
+        print_line(c);
+        printf("\n");
+    }
 		executingSimple(c);
 		break;
 	case SUBSHELL_COMMAND:
-		executingSubshell(c);
+		executingSubshell(c, verbose);
 		break;
 	case AND_COMMAND:
-		executingAnd(c);
+		executingAnd(c, verbose);
 		break;
 	case OR_COMMAND:
-		executingOr(c);
+		executingOr(c, verbose);
 		break;
 	case SEQUENCE_COMMAND:
-		executingSequence(c);
+		executingSequence(c, verbose);
 		break;
 	case PIPE_COMMAND:
-		executingPipe(c);
+		executingPipe(c, verbose);
 		break;
 	default:
 		error(1, 0, "Not a valid command");
@@ -117,7 +123,7 @@ void executingSimple(command_t c)
     }
 }
 
-void executingSubshell(command_t c)
+void executingSubshell(command_t c, bool verbose)
 {
 	pid_t pid = fork();
     int status;
@@ -128,7 +134,7 @@ void executingSubshell(command_t c)
     }
     
 	if (pid == 0){
-		execute_switch(c->u.subshell_command);
+		execute_switch(c->u.subshell_command, verbose);
 		_exit(c->u.subshell_command->status);
 	}
     else
@@ -140,7 +146,7 @@ void executingSubshell(command_t c)
     }
 }
 
-void executingAnd(command_t c)
+void executingAnd(command_t c, bool verbose)
 {
 	pid_t pid = fork();
     int status;
@@ -151,7 +157,7 @@ void executingAnd(command_t c)
     }
 	
 	if (pid == 0){
-		execute_switch(c->u.command[0]);
+		execute_switch(c->u.command[0], verbose);
 		_exit(c->u.command[0]->status);
 	}
 	
@@ -162,7 +168,7 @@ void executingAnd(command_t c)
 		if (exitStatus == 0){ //if left run successfully
 			pid_t pid2 = fork(); 
 			if (pid2 == 0){
-				execute_switch(c->u.command[1]);
+				execute_switch(c->u.command[1], verbose);
 				_exit(c->u.command[1]->status);
 			}
 			
@@ -178,7 +184,7 @@ void executingAnd(command_t c)
 }
 
 
-void executingOr(command_t c)
+void executingOr(command_t c, bool verbose)
 {
 	pid_t pid = fork();
     int status;
@@ -189,7 +195,7 @@ void executingOr(command_t c)
     }
 	
 	if (pid == 0){
-		execute_switch(c->u.command[0]);
+		execute_switch(c->u.command[0], verbose);
 		_exit(c->u.command[0]->status);
 	}
 	
@@ -200,7 +206,7 @@ void executingOr(command_t c)
 		if (exitStatus == 1){ //if left fails to run
 			pid_t pid2 = fork(); 
 			if (pid2 == 0){
-				execute_switch(c->u.command[1]);
+				execute_switch(c->u.command[1], verbose);
 				_exit(c->u.command[1]->status);
 			}
 			
@@ -215,7 +221,7 @@ void executingOr(command_t c)
 	}
 }
 
-void executingSequence(command_t c)
+void executingSequence(command_t c, bool verbose)
 {
 	pid_t pid = fork();
     int status;
@@ -226,7 +232,7 @@ void executingSequence(command_t c)
     }
 	
 	if (pid == 0){
-		execute_switch(c->u.command[0]);
+		execute_switch(c->u.command[0], verbose);
 		_exit(c->u.command[0]->status);
 	}
 	
@@ -235,7 +241,7 @@ void executingSequence(command_t c)
 
 		pid_t pid2 = fork(); 
 		if (pid2 == 0){
-			execute_switch(c->u.command[1]);
+			execute_switch(c->u.command[1], verbose);
 			_exit(c->u.command[1]->status);
 		}
 		
@@ -248,7 +254,7 @@ void executingSequence(command_t c)
 	}
 }
 
-void executingPipe(command_t c)
+void executingPipe(command_t c, bool verbose)
 {
 	pid_t returnedPid;
 	pid_t firstPid;
@@ -277,7 +283,7 @@ void executingPipe(command_t c)
 		{
 			error(1, errno, "error with dup2");
 		}
-		execute_switch(c->u.command[1]);
+		execute_switch(c->u.command[1], verbose);
 		_exit(c->u.command[1]->status);
 	}
 	else 
@@ -296,7 +302,7 @@ void executingPipe(command_t c)
             {
 				error (1, errno, "error with dup2");
             }
-			execute_switch(c->u.command[0]);
+			execute_switch(c->u.command[0], verbose);
 			_exit(c->u.command[0]->status);
 		}
 		else
@@ -767,24 +773,91 @@ void debug_list(struct dependency_list *list)
 }
 
 void
-execute_command (command_t c, bool time_travel)
+print_line (command_t c)
+{
+    switch (c->type)
+      {
+      case AND_COMMAND:
+      case SEQUENCE_COMMAND:
+      case OR_COMMAND:
+      case PIPE_COMMAND:
+        {
+  	print_line (c->u.command[0]);
+  	static char const command_label[][3] = { "&&", ";", "||", "|" };
+  	printf ("%s ", command_label[c->type]);
+  	print_line (c->u.command[1]);
+  	break;
+        }
+
+      case SIMPLE_COMMAND:
+        {
+  	char **w = c->u.word;
+  	printf ("%s ", *w);
+  	while (*++w)
+  	  printf ("%s ", *w);
+  	break;
+        }
+
+      case SUBSHELL_COMMAND:
+      printf("( ");
+        print_line (c->u.subshell_command);
+      printf(") ");
+        break;
+
+      default:
+        return;
+      }
+
+    if (c->input)
+      printf ("<%s ", c->input);
+    if (c->output)
+      printf (">%s ", c->output);
+}
+
+void
+execute_command (command_t c, bool time_travel, bool verbose,
+                        bool verbose_minimal)
 {
    /*FIXME: Replace this with your implementation.  You may need to
      add auxiliary functions and otherwise modify the source code.
      You can also use external functions defined in the GNU C Library.  
     */
-
-	if (time_travel == false)
-	{
-	    execute_switch(c);
-        return;
-	}
     
     //  Start 1C time_travel implementation
     //  Let's start with populating an array in post-order from 'c' such that we
     //      can get a dependency list going.
     struct dependency_list *list = get_dependency_list(c);
     // debug_list(list);
+    
+    if(time_travel == false)
+    {
+        struct dependency_node *iter = list->head;
+        while(iter != NULL)
+        {
+            if(verbose_minimal)
+            {
+                print_line(iter->command);
+                printf("\n");
+            }
+            
+            int status;
+            execute_switch(iter->command, verbose);
+            iter = remove_dependency_node(list, iter->nid);
+            
+            if(verbose_minimal || verbose)
+                printf("\n");
+        }
+        
+        complete_sequence_tree(c);
+        return;
+    }
+
+
+    if(verbose_minimal)
+    {
+        print_line(c);
+        printf("\n");
+    }
 
     while (!dependency_list_empty(list))
     {
@@ -799,6 +872,7 @@ execute_command (command_t c, bool time_travel)
                     int exit_status = WEXITSTATUS(status);
                     iter->command->status = exit_status;
                     iter = remove_dependency_node(list, iter->nid);
+                    continue;
                 }
             
             if(iter != NULL)
@@ -817,7 +891,7 @@ execute_command (command_t c, bool time_travel)
             
             pid_t pid = fork();
             if (pid == 0) {
-                execute_switch(iter->command);
+                execute_switch(iter->command, verbose);
                 _exit(iter->command->status);
             }
             if (pid > 0)

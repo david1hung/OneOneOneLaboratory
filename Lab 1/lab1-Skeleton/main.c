@@ -13,7 +13,7 @@ static char const *script_name;
 static void
 usage (void)
 {
-    error (1, 0, "usage: %s [-pt] SCRIPT-FILE", program_name);
+    error (1, 0, "usage: %s [-ptvx] SCRIPT-FILE", program_name);
 }
 
 static int
@@ -28,13 +28,17 @@ main (int argc, char **argv)
     int command_number = 1;
     bool print_tree = false;
     bool time_travel = false;
+    bool verbose = false;
+    bool verbose_minimal = false;
     program_name = argv[0];
     
     for (;;)
-        switch (getopt (argc, argv, "pt"))
+        switch (getopt (argc, argv, "ptvx"))
     {
         case 'p': print_tree = true; break;
         case 't': time_travel = true; break;
+        case 'v': verbose_minimal = true; break;
+        case 'x': verbose = true; break;
         default: usage (); break;
         case -1: goto options_exhausted;
     }
@@ -68,7 +72,12 @@ options_exhausted:;
             else
             {
                 last_command = command;
-                execute_command (command, time_travel);
+                execute_command (command, time_travel, verbose, verbose_minimal);
+                
+                if(verbose)
+                {
+                    printf("\n");
+                }
             }
         }
     }
@@ -76,7 +85,14 @@ options_exhausted:;
     {
         parallelize_command_stream(command_stream);
         last_command = read_command_stream(command_stream);
-        execute_command(last_command, time_travel);
+        
+        if(verbose)
+        {
+            print_line(last_command);
+            printf("\n");
+        }
+        
+        execute_command(last_command, time_travel, verbose, verbose_minimal);
     }
     
     
