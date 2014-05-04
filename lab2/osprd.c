@@ -637,9 +637,39 @@ int osprd_ioctl(struct inode *inode, struct file *filp,
 		// Otherwise, if we can grant the lock request, return 0.
 
 		// Your code here (instead of the next two lines).
-		eprintk("Attempting to try acquire\n");
-		r = -ENOTTY;
-
+        if(filp_writable) {
+            osp_spin_lock(&(d->mutex));
+            
+            if (d->writeLockingPids == NULL && d->readLockingPids == NULL) {
+                filp->f_flags |= F_OSPRD_LOCKED;
+                addToList(&(d->writeLockingPids), current->pid);
+                osp_spin_unlock(&(d->mutex));
+                return 0;
+            }
+            else {
+                osp_spin_unlock(&(d->mutex));
+                return -EBUSY;
+            }
+        }
+        else {
+            osp_spin_lock(&(d->mutex));
+            
+            if (pidInList(d->readLockingPids, current->pid)) {
+                osp_spin_unlock(&(d->mutex));
+                return -EDEADLK;
+            }
+            
+            if (d->writeLockingPids == NULL) {
+                filp->f_flags |= F_OSPRD_LOCKED;
+                addToList(&(d->writeLockingPids), current->pid);
+                osp_spin_unlock(&(d->mutex));
+                return 0;
+            }
+            else {
+                osp_spin_unlock(&(d->mutex));
+                return -EBUSY;
+            }
+        }
 	} else if (cmd == OSPRDIOCRELEASE) {
 
 		// EXERCISE: Unlock the ramdisk.
