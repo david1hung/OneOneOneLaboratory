@@ -422,6 +422,27 @@ static int osprd_close_last(struct inode *inode, struct file *filp)
 		// as appropriate.
 
 		// Your code here.
+		osp_spin_lock(&(d->mutex));
+
+		if (!pidInList(d->writeLockingPids, current->pid) && !(pidInList(d->readLockingPids, current->pid))) {
+			osp_spin_unlock(&(d->mutex));
+			return -EINVAL;
+		}
+
+		if (pidInList(d->writeLockingPids, current->pid)) {
+			removeFromList(&(d->writeLockingPids), current->pid);	
+		}
+
+		if (pidInList(d->readLockingPids, current->pid)) {
+			removeFromList(&(d->readLockingPids), current->pid);
+		}
+
+		if (d->readLockingPids == NULL && d->writeLockingPids == NULL) {
+			filp->f_flags &= !F_OSPRD_LOCKED;
+		}
+		
+		osp_spin_unlock(&(d->mutex));
+		wake_up_all(&(d->blockq));
 
 		// This line avoids compiler warnings; you may remove it.
 		(void) filp_writable, (void) d;
