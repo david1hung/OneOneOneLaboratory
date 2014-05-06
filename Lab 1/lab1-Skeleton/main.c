@@ -74,10 +74,12 @@ options_exhausted:;
                 last_command = command;
                 execute_command (command, time_travel, verbose, verbose_minimal);
                 
+                /* Extra line
                 if(verbose)
                 {
                     printf("\n");
                 }
+                */
             }
         }
     }

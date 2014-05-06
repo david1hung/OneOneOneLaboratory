@@ -844,8 +844,10 @@ execute_command (command_t c, bool time_travel, bool verbose,
             execute_switch(iter->command, verbose);
             iter = remove_dependency_node(list, iter->nid);
             
+            /*
             if(verbose_minimal || verbose)
                 printf("\n");
+                */
         }
         
         complete_sequence_tree(c);
