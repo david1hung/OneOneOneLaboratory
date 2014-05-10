@@ -28,8 +28,8 @@ main (int argc, char **argv)
     int command_number = 1;
     bool print_tree = false;
     bool time_travel = false;
+    bool xtrace = false;
     bool verbose = false;
-    bool verbose_minimal = false;
     program_name = argv[0];
     
     for (;;)
@@ -37,8 +37,8 @@ main (int argc, char **argv)
     {
         case 'p': print_tree = true; break;
         case 't': time_travel = true; break;
-        case 'v': verbose_minimal = true; break;
-        case 'x': verbose = true; break;
+        case 'v': verbose = true; break;
+        case 'x': xtrace = true; break;
         default: usage (); break;
         case -1: goto options_exhausted;
     }
@@ -72,14 +72,11 @@ options_exhausted:;
             else
             {
                 last_command = command;
-                execute_command (command, time_travel, verbose, verbose_minimal);
-                
-                /* Extra line
+                execute_command (command, time_travel, xtrace, verbose);
                 if(verbose)
                 {
                     printf("\n");
                 }
-                */
             }
         }
     }
@@ -88,13 +85,7 @@ options_exhausted:;
         parallelize_command_stream(command_stream);
         last_command = read_command_stream(command_stream);
         
-        if(verbose)
-        {
-            print_line(last_command);
-            printf("\n");
-        }
-        
-        execute_command(last_command, time_travel, verbose, verbose_minimal);
+        execute_command(last_command, time_travel, xtrace, verbose);
     }
     
     

@@ -1,0 +1,137 @@
+DESIGN PROBLEM
+David Hung: 604191130
+Victor Kwan: 004151151
+
+For this assignment, although we were assigned to the 1B design problem, a lot of our implementation revolved around an adaptation of the work we did for 1C. In particular, for our implementation of 1C, we extended the parallelism from the specification-required command-tree-by-command-tree parallelism to additionally parallelize within each command tree itself. Through our work on this parallelism, the task of implementing the verbose and xtrace options became surprisingly simple. As such, we view the implementation of our command tree parallelism as additional functionality we add to our time travel shell.
+(Our description of lab 1B design is in section 2)
+
+1. Command tree by command tree parallelization
+Parallelizing within a command tree works by considering that every branch of a SEQUENCE_COMMAND, unlike an AND_COMMAND or an OR_COMMAND, must be executed irrespective of the return status of the previous command. Furthermore, when we populate the command trees, the SEQUENCE_COMMAND occupies the top of each tree. For example, when we execute the command:
+
+    (echo a > hello.txt && echo b ; echo c
+    ) && echo word
+    echo d
+    echo e
+    
+We generate a tree of the following structure:
+
+    # 1
+          (
+               echo a>hello.txt \
+             &&
+               echo b \
+           ;
+             echo c
+          ) \
+        &&
+          echo word \
+      ;
+        echo d \
+      ;
+        echo e
+
+As we can see, the SEQUENCE_COMMAND, because of its low precedence, percolates up the command tree. We can exploit this behavior to parallelize within a command tree. The motivation behind providing this functionality is readily apparent if we consider the following command:
+
+    od -tf -N 1600000 /dev/urandom > a.txt
+    od -tf -N 800000 /dev/urandom > b.txt
+    od -tf -N 1600000 /dev/urandom > a.txt
+    od -tf -N 1600000 /dev/urandom > b.txt
+    od -tf -N 400000 /dev/urandom > a.txt
+    od -tf -N 1600000 /dev/urandom > b.txt
+    
+By being able to parallelize within a command tree, we allow commands with long runtimes to be sped up substantially. This is especially relevant for users of the time travel shell who choose to input their commands directly into standard input as opposed to executing a shell script file.
+
+We explore the broader dependency relations and order-of-execution in the Readme file for 1C. For the purpose of this design problem, we're more interested in the SEQUENCE_COMMAND breakdown for the specific implementation of command tree parallelization. We implemented the SEQUENCE_COMMAND breakdown using two recursive functions: populate_dependency_list (execute-command.c:547) and probe_sequence_command (execute-command.c:584). It's important to note that probe_sequence_command serves as a helper function for populate_dependency_list – it serves to traverse the tree from a provided node and returns true if a SEQUENCE_COMMAND is encountered. populate_dependency_list exploits this helper function as it executes the following pseudocode:
+
+    populate_dependency_list(list, command)
+        if command is NULL
+            return
+        else
+            if there are no SEQUENCE_COMMAND descendants of command
+                // Here, we can reasonably assume that we are either within a
+                // simple command or a subshell command.
+                add the command to the dependency list
+                return
+            
+            if there are SEQUENCE_COMMAND descendants in the left subtree
+                populate_dependency_list(list, left_command)
+            else
+                add the left command to the dependency list
+
+            if there are SEQUENCE_COMMAND descendants in the right subtree
+                populate_dependency_list(list, right_command)
+            else
+                add the right command to the dependency list
+
+We essentially find the lowest-level SEQUENCE_COMMANDs and add them as parallelizable commands to be part of the dependency list. We use a linked list to hold each of these dependency nodes (provided that a linked list would give us the most convenient interface to add new commands or remove complete commands from the dependency list) and parallelize by executing these subtrees as opposed to full command trees in parallel. When we finish executing each of the dependency nodes, we recombine all of the return statuses to return the rightmost SEQUENCE_COMMAND's status through the complete_sequence_tree (execute-command.c:716) command.
+
+The evident trade-off in implementing parallelization is the space requirement (in that we produce substantially more dependency nodes per command tree) and the additional overhead that comes with populating on a SEQUENCE_COMMAND level. If we consider that we are:
+
+    1. Traversing the tree to populate the dependency list
+    2. Probing the tree during (1) to look for SEQUENCE_COMMANDs
+    3. Iterating over each dependency node to populate the dependencies
+    
+Then the process of populating the dependency list and the dependencies incurs an O(n^2) overhead to the non-parallel implementation of the time travel shell, where n denotes the number of commands within the original command tree. Nonetheless, we see some large overall performance gains, especially for slow commands, when we use parallelism on a subtree level. As an example from the above generation of random integers, we have:
+
+    #1: Sans parallelism
+    real 5.94
+    user 3.98
+    sys 1.41
+
+    #2: Parallelism with dependencies
+    real 3.18
+    user 4.74
+    sys 3.99
+
+Perhaps a further adaptation of this subtree-level parallelization would be to add predictive parallelization of AND_COMMANDs and OR_COMMANDs provided that the SIMPLE_COMMANDs called generally return 0 and 1 respectively.
+
+2. verbose (-v) and xtrace (-x)
+The verbose option is implemented using the dependency list structure. In fact, the main alteration we had to make is simply to do with writing a print_line function (execute-command.c:776) that prints from a given command as an adaptation of the provided print_command function (print-command.c:54).
+
+The verbose option (-v) in bash prints the command lines executed before execution. We implemented this in our lab by writing a print_line function which is able to print a command tree structure in a single line. Then the command line will be printed out right before the execute_switch is called on the command tree. To invoke the printing of the command line, we pass in an additional parameter verbose to execute command, which checks the condition to print command lines. 
+
+The xtrace option (-x) in bash prints the commands executed right before execution. We implemented this in our lab by printing the simple commands right before their execution within our executed switch. Since at the leaf of each command tree is a simple command, all the commands will be printed out before execution. To invoke the printing of the commands, we pass in an additional parameter (xtrace) which would satisfy the if condition check to print the commands. 
+
+In parallel execution. Every command line is placed into one large command tree where they are separated by sequence command. When verbose mode (-v) is called. The command tree printed will be the combination of the all the command lines. This makes sense because all the commands could in theory be executed in parallel under no dependency considerations. 
+
+Two of our improvements include
+1. In verbose mode, instead of printing redundant new lines, we only print the relevant lines which includes the commands as a more accurate representation of what is actually executed by the shell program.
+2. Printed command trees are separated by an additional new line for clarity.
+3. Sequence command and new lines are treated equally as they are both representation of sequence commands. Therefore they are separated from their original command lines. However, it will still be part of the command tree printing. 
+
+
+Sample Output
+
+Verbose Mode 
+sample-text.txt
+//Open//
+echo design &&
+
+
+
+echo lab ; echo 1b
+
+
+echo next tree
+//Close//
+
+On bash -v sample-text.txt, this will print
+echo design &&echo lab ; echo 1bdesignlab1becho next treenext tree
+
+On our implementation.
+./timetrash -v sample-text.txt, this will print
+echo design && echo lab designlabecho 1b 1becho next tree next treeWhich is tidier as it removes the extra new lines. The commands are cleanly separated by command trees. 
+
+Xtrace mode
+Using the same sample file, both bash and our implementation prints the same output
+bash -x sample-text.txt (./timetrash -x sample-text.txt)
++ echo design design+ echo lab lab+ echo 1b 1b+ echo next tree next tree
+
+
+Parallel Mode
+Additional to bash, we added the ability to invoke both verbose and xtrace mode along with parallel. 
+Below is a sample output with sample-text.txt
+./timetrash -tvx sample-text.txt
+echo design && echo lab ; echo 1b ; echo next tree + echo next tree + echo 1b next tree+ echo design 1bdesign+ echo lab labThe first line is the verbose mode printing the whole command tree which combines all the command lines as they are executed in parallel.
+The + lines are the xtrace showing the command executed. They are now in sequential order because the execution was in parallel.
+

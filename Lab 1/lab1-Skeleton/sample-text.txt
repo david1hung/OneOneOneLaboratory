@@ -1,9 +1,9 @@
-echo hello > a.txt && echo world > b.txt && cat a.txt
+echo design &&
 
-cat a.txt | sort > c.txt
 
-cat c.txt > d.txt
 
-cat d.txt
 
-rm a.txt b.txt c.txt d.txt
+echo lab ; echo 1b
+
+
+echo next tree
