@@ -677,7 +677,7 @@ int osprd_ioctl(struct inode *inode, struct file *filp,
             
             if (pidInList(d->readLockingPids, current->pid)) {
                 osp_spin_unlock(&(d->mutex));
-                return -EDEADLK;
+                return -EINVAL;
             }
             
             if (d->writeLockingPids == NULL) {
