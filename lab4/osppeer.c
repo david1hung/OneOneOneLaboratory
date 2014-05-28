@@ -644,11 +644,27 @@ static void task_upload(task_t *t)
 	}
 
 	assert(t->head == 0);
-	if (osp2p_snscanf(t->buf, t->tail, "GET %s OSP2P\n", t->filename) < 0) {
+    // The maximum length for t->filename is 255 characters. Given that the
+    // string we're looking for in buffer is "GET %s OSP2P\n": 11 characters +
+    // however long %s is, we want the buffer length to be at most 266 chars
+    // long, which is equivalent to FILENAMESIZ + 10.
+	if (strlen(t->buf) - 10 > FILENAMESIZ ||
+            osp2p_snscanf(t->buf, t->tail, "GET %s OSP2P\n", t->filename) < 0) {
 		error("* Odd request %.*s\n", t->tail, t->buf);
 		goto exit;
 	}
 	t->head = t->tail = 0;
+    
+    // If we get to here, we're guaranteed that our file name is within 255
+    // characters long. Now, we're interested in making sure that it's within
+    // our current directory. We can do this by iterating through all 255 chars:
+    // if we encounter any forward slash, then the filename is invalid.
+    int i;
+    for(i=0; i<FILENAMESIZ-1 && t->filename[i] != '\0'; i++)
+        if(t->filename[i] == '/') {
+			error("* The file requested is not in the current directory");
+			goto exit;
+        }
 
 	t->disk_fd = open(t->filename, O_RDONLY);
 	if (t->disk_fd == -1) {
@@ -656,7 +672,8 @@ static void task_upload(task_t *t)
 		goto exit;
 	}
     
-    // Check if the file is within the current working directory.
+    // 2: Check if the file is within the current working directory.
+    /*
     char *cwd = getcwd(NULL, 0);
     size_t cwd_len = strlen(cwd);
     char *path = realpath(t->filename, NULL);
@@ -670,6 +687,7 @@ static void task_upload(task_t *t)
     
     free(cwd);
     free(path);
+    */
 
 	message("* Transferring file %s\n", t->filename);
 	// Now, read file from disk and write it to the requesting peer.
