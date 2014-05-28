@@ -14,6 +14,7 @@
 #include <stdarg.h>
 #include <ctype.h>
 #include <sys/socket.h>
+#include <sys/wait.h>
 #include <dirent.h>
 #include <netdb.h>
 #include <assert.h>
@@ -654,6 +655,21 @@ static void task_upload(task_t *t)
 		error("* Cannot open file %s", t->filename);
 		goto exit;
 	}
+    
+    // Check if the file is within the current working directory.
+    char *cwd = getcwd(NULL, 0);
+    size_t cwd_len = strlen(cwd);
+    char *path = realpath(t->filename, NULL);
+    size_t path_len = strlen(path);
+    
+    if(path_len < cwd_len || 
+        strncmp(cwd, path, path_len) != 0) {
+		error("* The file %s is not in the current directory", t->filename);
+		goto exit;
+    }
+    
+    free(cwd);
+    free(path);
 
 	message("* Transferring file %s\n", t->filename);
 	// Now, read file from disk and write it to the requesting peer.
@@ -757,15 +773,31 @@ int main(int argc, char *argv[])
 	tracker_task = start_tracker(tracker_addr, tracker_port);
 	listen_task = start_listen();
 	register_files(tracker_task, myalias);
-
+    pid_t pid;
 	// First, download files named on command line.
 	for (; argc > 1; argc--, argv++)
-		if ((t = start_download(tracker_task, argv[1])))
-			task_download(t, tracker_task);
+		if ((t = start_download(tracker_task, argv[1]))) {
+            if((pid = fork()) == 0) {
+                task_download(t, tracker_task);
+                _exit(0);
+            } else if(pid == -1) {
+                error("* Download fork failed");
+            }
+		}
 
 	// Then accept connections from other peers and upload files to them!
-	while ((t = task_listen(listen_task)))
-		task_upload(t);
+	while ((t = task_listen(listen_task))) {
+        if((pid = fork()) == 0) {
+    		task_upload(t);
+            _exit(0);
+        } else if(pid == -1) {
+            error("* Upload fork failed");
+        }
+	}
+    
+    int status;
+    while(waitpid(-1, &status, 0) != 0)
+        continue;
 
-	return 0;
+    exit(0);
 }
