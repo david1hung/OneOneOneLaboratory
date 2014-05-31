@@ -13,28 +13,78 @@
 # information you'd like us to know, please add it at the end of the file.
 
 # Partner 1
-Name: 
-Student ID: 
-Email: 
+Name: Victor Kwan
+Student ID: 004151151
+Email: victorkwan@ucla.edu
 
 # Partner 2 (if you're working in a team)
-Name: 
-Student ID: 
-Email: 
+Name: David Hung
+Student ID: 604191130
+Email: david1hung@hotmail.com
 
 # EXERCISE 1: What method you used to make your peer download and upload
 #    files in parallel?  (~1-3 sentences)
+We used fork() to produce a child process that runs both downloads and uploads
+concurrently. After all of the download and upload tasks are processed, we call
+waitpid(...) to ensure that all the child processes are properly reaped and not
+exited before they finish their respective tasks.
 
 # EXERCISE 2A: What conditions did you find and fix that would have
 #    triggered a buffer overrun bug?  (~1-3 sentences each)
 
+Filename overrun in task_upload:
+We ensured that an input following the syntax "GET %s OSP2P\n" would not exceed 
+the length 255 + 11, which is equivalently FILENAMESIZ + 10.
+
+Filename overrun in task_download:
+We also ensured that when downloading a file that already exists, and the "~%d~"
+is appended, that the new filename will not exceed the limit. In this case, we
+check for strlen(t->filename) + 4 > FILENAMESIZ - 1 to take into account the
+maximum number of characters that comes with the new suffix.
+
+Filename overrun in start_download:
+Since we pass argv[1] into start_download, we need to ensure that the filename
+being passed is not too long. We check that its size is <= FILENAMESIZ - 1.
+
 # EXERCISE 2B: What other robustness problems did you fix?  (~1-3 sentences
 #    each)
+
+Files only from current working directory:
+We ensure that all files are within our current working directory. We do this
+by ensuring that there are no forward slashes in the file names. If we want to 
+expand this implementation to allow for files within subdirectories, we can use
+getcwd(...) in conjunction with realpath(...) to determine whether the absolute
+path of the parent directory corresponds to the current working directory.
+
+Increase size of the task buffer:
+In the case that we decide to connect to a popular tracker, then we might
+experience problems involving accommodating a large number of peers. In 
+particular, if many peers are logged in at once, our peer won't be able to
+download anything, because communications with the tracker will get confused.
+Although we would ideally dynamically resize TASKBUFSIZ to reduce collisions,
+it suffices here to statically increase its size.
+
+Cap the number of peers to upload to:
+We cap the number of connected upload peers through the constant
+MAX_UPLOAD_PEERS that we presently set to 50. This is an important defense
+mechanism against attackers who attempt to flood us with too many upload
+requests.
+
+Ideas NYI:
+1. Fixed block sizes with MD5 checksum
+2. Connection timeout
 
 # EXERCISE 3: Describe the attacks you implemented for "evil mode".  Why
 #    are they attacks?  (~3-10 sentences each)
 
 # Extra credit problems
-#Extra credit problem: none
+#Extra credit problem:
+
+MD5 checksum:
+MD5 checksum implemented! We implemented MD5 functionality by creating a 
+function, md5_generate(...), that takes a filename and returns the relevant 
+text digest. We then use this function after we download the data, when we 
+register our files with the tracker, and when we confirm that the MD5 
+registered with the tracker matches that of our downloaded file.
 
 # Add any other information you'd like us to know below this line.
