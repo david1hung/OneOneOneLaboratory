@@ -77,17 +77,22 @@ Ideas NYI:
 # EXERCISE 3: Describe the attacks you implemented for "evil mode".  Why
 #    are they attacks?  (~3-10 sentences each)
 
-evilmode = 1:
-This attack is implement in task_download. We attack the peer by writing over files we requests instead of downloading it, doing so continuously to fill up the peer’s file system and clog up open_sockets. This is an attack which leads to denial of service, as other peers will be unable to obtain the file from this peer when we clog up his system. Also that the peer will get invalid files which fills up his system. Also, as the download request continues to try to obtain the same file from other peers, we will continue to attack peers with that file. 
-A possible prevention to this attack would be to only allow read-only access on the target peer’s side, actually this is already implemented. So then the next phase of this attack would be to attempt to continuously request the file from the same peer to fill up the peers sockets, achieving denial of service. 
+evil_mode = 1:
+This attack is implement in task_download. We attack the peer causing a buffer overflow through our write request, doing so to corrupt peers’ stacks and buffers and potentially fill up the file systems. This is an attack which leads to corrupted systems and denial of service, as other peers will be unable to obtain the file from this peer when we cause problems its system. Also that the peer will get invalid files which fills up his system. As our attack is done recursively, the download request will continue to try to obtain the same file from other peers, attacking them with the overflow. Currently the buffer attack does a request that is 10 times the filename size limit, which will cause an overflow, but a more malicious attack would be to inject code that tamper with the system to cause problems. 
+A possible prevention to this attack would be to limit the buffer, actually this is already implemented in our 2A. So then the next phase of this attack would be to attempt to continuously request the file from the same peer to fill up the peers sockets, achieving denial of service. 
 
-evilmode = 2
+evil_mode = 2
 This attack is implemented in task_upload. We attack a peer by uploading a file we specify instead of what the peer requested. We have it named ../bad_file which would be a bad file in the parent directory. This file uploaded can be a virus executable, or just a large file that fills up the peers filesystems (filled possibly by /dev/urandom or /dev/zero). In the eyes of the peer, it is still getting the file it requested for, but the file is one we specify. 
 
 A possible prevention to this attack would be to obtain the file size of the file requested, and only download as far as the file size. Also, a checksum with the tracker could be used to make sure the file downloaded is actually the right file. 
 
 Then another attack would upload a file of the same size, with certain corrupted bits that we flip. 
 This is an attack because the peer does not get the file requested, but the tracker sees us as uploading files. 
+
+evil_mode = 3
+This attack is implemented in task_download. We attempt to download files outside of the current directory. This is an attack because it is against the protocol to do so, and accessing other system files can lead to security issues on the peer’s side. In our case, we attempt to access /dev/zero which leads to repeated write loops that consumes CPU time. 
+
+A possible prevention to this attack would be to check for /’s that means the request has a directory path, which is not allowed as the only things allowed to be shared are the ones in current directory. (We implemented this is 2B). 
 
 
 # Extra credit problems

